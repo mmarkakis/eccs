@@ -8,14 +8,14 @@ from .ate import ATECalculator
 class ECCS:
 
     def __init__(
-        self, treatment: int, outcome: int, data_path: str, graph_path: Optional[str]
+        self, treatment: str, outcome: str, data_path: str, graph_path: Optional[str]
     ):
         """
         Initialize the ECCS object.
 
         Parameters:
-            treatment: The index of the treatment variable.
-            outcome: The index of the outcome variable.
+            treatment: The name of the treatment variable.
+            outcome: The name of the outcome variable.
             data_path: The path to the data file.
             graph_path: Optionally, the path to the causal graph file in DOT format.
         """
@@ -25,6 +25,9 @@ class ECCS:
 
         self._data = pd.read_csv(data_path)
         self._num_vars = self._data.shape[1]
+
+        self._treatment_idx = self._data.columns.get_loc(treatment)
+        self._outcome_idx = self._data.columns.get_loc(outcome)
 
         if graph_path is not None:
             # Load the graph from a file in DOT format into a networkx DiGraph object
@@ -105,8 +108,8 @@ class ECCS:
         current_graph = self._graph.copy()
         original_ate = ATECalculator.get_ate_and_confidence(
             self._data,
-            self._data.columns[self._treatment],
-            self._data[self._outcome],
+            self._treatment_idx,
+            self._outcome_idx,
             current_graph,
         )["ATE"]
 
@@ -133,8 +136,8 @@ class ECCS:
             # Calculate the ATE of the treatment on the outcome using the new graph
             new_ate = ATECalculator.get_ate_and_confidence(
                 self._data,
-                self._data.columns[self._treatment],
-                self._data[self._outcome],
+                self._treatment_idx,
+                self._outcome_idx,
                 current_graph,
             )["ATE"]
 
