@@ -4,17 +4,19 @@ import numpy as np
 class MAB:
     """Implements the multi-armed bandit part of selecting how to modify the graph next."""
 
-    def __init__(self, num_arms: int, epsilon: float) -> None:
+    def __init__(self, num_arms: int, epsilon: float, banlist: list[int]) -> None:
         """Initialize the MAB object.
 
         Parameters:
             num_arms: The number of arms in the bandit.
             epsilon: The epsilon value for the epsilon-greedy algorithm.
+            banlist: The list of arms that are banned from being selected.
         """
         self._n = num_arms
-        self._rewards = np.zeros(
-            (self._n, 2)
-        )  # 2 columns: 1st for the number of times the arm was pulled, 2nd for the average reward
+        self._rewards = {
+            i: (0, 0) for i in range(self._n) if i not in banlist
+        }  # 2 columns: 0th for the number of times the arm was pulled, 1st for the average reward
+        self._epsilon = epsilon
 
     def select_arm(self) -> int:
         """Select an arm according to the epsilon-greedy algorithm.
@@ -23,10 +25,12 @@ class MAB:
             The index of the arm to select.
         """
         if np.random.random() < self._epsilon:
-            return np.random.randint(self._n)
+            # Randomly select an arm
+            return np.random.choice(list(self._rewards.keys()))
         else:
-            return np.argmax(self._rewards[:, 1])
-
+            # Select the arm with the highest average reward
+            return max(self._rewards, key=lambda x: self._rewards[x][1])
+          
     def update(self, arm: int, reward: float) -> None:
         """Update the rewards for the selected arm.
 
@@ -34,5 +38,5 @@ class MAB:
             arm: The index of the arm that was selected.
             reward: The reward for selecting that arm.
         """
-        n, r = self._rewards[arm]
-        self._rewards[arm] = (n + 1, (n * r + reward) / (n + 1))
+        n, avg = self._rewards[arm]
+        self._rewards[arm] = (n + 1, (n * avg + reward) / (n + 1))
