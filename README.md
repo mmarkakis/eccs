@@ -56,3 +56,12 @@ deactivate
 
 This command will return you to your system's default Python interpreter.
 
+## Running the interactive web application
+
+On a terminal with the virtual environment running, switch into the `src/webapp` directory and run:
+
+```bash
+$ python3 -m streamlit run Home.py
+```
+
+Then, follow and click the link to the Network URL that appears on the terminal
