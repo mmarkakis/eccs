@@ -1,21 +1,19 @@
-from typing import Optional
+from typing import Optional, Tuple
 import pandas as pd
 import networkx as nx
-from .mab import MAB
-from .ate import ATECalculator
+from .edge_state_matrix import EdgeStateMatrix
+from .graph_renderer import GraphRenderer
 
 
 class ECCS:
 
     def __init__(
-        self, treatment: str, outcome: str, data_path: str, graph_path: Optional[str]
+        self, data_path: str, graph_path: Optional[str]
     ):
         """
         Initialize the ECCS object.
 
         Parameters:
-            treatment: The name of the treatment variable.
-            outcome: The name of the outcome variable.
             data_path: The path to the data file.
             graph_path: Optionally, the path to the causal graph file in DOT format.
         """
@@ -26,15 +24,41 @@ class ECCS:
         self._data = pd.read_csv(data_path)
         self._num_vars = self._data.shape[1]
 
-        self._treatment_idx = self._data.columns.get_loc(treatment)
-        self._outcome_idx = self._data.columns.get_loc(outcome)
 
         if graph_path is not None:
             # Load the graph from a file in DOT format into a networkx DiGraph object
             self._graph = nx.DiGraph(nx.nx_pydot.read_dot(graph_path))
+        else:
+            self._graph = nx.DiGraph()
+            self._graph.add_nodes_from(range(self._num_vars))
+
+        self._edge_decisions_matrix = EdgeStateMatrix(self._data.columns)
+        self._edge_decisions_matrix.clear_and_set_from_graph(
+            self._graph, mark_missing_as="Undecided"
+        )
 
         # Initialize the banlist to include all self-edges
         self._banlist = [self._edge_to_edge_idx((i, i)) for i in range(self.num_vars)]
+
+    def set_treatment(self, treatment: str) -> None:
+        """
+        Set the treatment variable.
+
+        Parameters:
+            treatment: The name of the treatment variable.
+        """
+        self._treatment = treatment
+        self._treatment_idx = self._data.columns.get_loc(treatment)
+
+    def set_outcome(self, outcome: str) -> None:
+        """
+        Set the outcome variable.
+
+        Parameters:
+            outcome: The name of the outcome variable.
+        """
+        self._outcome = outcome
+        self._outcome_idx = self._data.columns.get_loc(outcome)
 
     def num_vars(self) -> int:
         """
@@ -44,39 +68,6 @@ class ECCS:
             The number of variables in the data.
         """
         return self._data.shape[1]
-
-    def _num_possible_dir_edges(self) -> int:
-        """
-        Calculate the number of possible directed edges in the graph.
-
-        Returns:
-            The number of possible directed edges in the graph.
-        """
-        return self._data.shape[1] ** 2
-
-    def _edge_idx_to_edge(self, idx: int) -> tuple[int, int]:
-        """
-        Convert an index of a possible directed edge to the corresponding edge.
-
-        Parameters:
-            idx: The index of the possible directed edge.
-
-        Returns:
-            A tuple containing the source and target nodes of the edge.
-        """
-        return (idx // self.num_vars, idx % self.num_vars)
-
-    def _edge_to_edge_idx(self, edge: tuple[int, int]) -> int:
-        """
-        Convert a directed edge to the corresponding index of a possible directed edge.
-
-        Parameters:
-            edge: A tuple containing the source and target nodes of the edge.
-
-        Returns:
-            The index of the possible directed edge.
-        """
-        return edge[0] * self.num_vars + edge[1]
 
     def _graph_is_acceptable(self, graph: nx.DiGraph) -> bool:
         """
@@ -92,57 +83,74 @@ class ECCS:
         return nx.is_directed_acyclic_graph(graph) and nx.has_path(
             graph, self._treatment, self._outcome
         )
-
-    def find_new_graph(self, rounds: int, epsilon: float) -> nx.DiGraph:
+    
+    def clear_graph(self, clear_edge_states: bool = True) -> None:
         """
-        Find a new causal graph for the data, based on exploring the space of possible graphs
-        using the multi-armed bandit algorithm.
+        Clear the graph and possibly edge states.
 
-        Returns:
-            The new causal graph.
+        Parameters:
+            clear_edge_states: Whether to also clear the edge states.
         """
+        self._graph = nx.DiGraph()
+        if clear_edge_states:
+            self._edge_states = EdgeStateMatrix(self.prepared_variable_names)
 
-        # Initialize the multi-armed bandit with one arm for each possible edge in the graph
-        mab = MAB(self._num_possible_dir_edges, epsilon, self._banlist)
+    def display_graph(self) -> None:
+        """
+        Display the current graph.
+        """
+        GraphRenderer.display_graph(self._graph, self._edge_decisions_matrix)
 
-        current_graph = self._graph.copy()
-        original_ate = ATECalculator.get_ate_and_confidence(
-            self._data,
-            self._treatment_idx,
-            self._outcome_idx,
-            current_graph,
-        )["ATE"]
+    def save_graph(self, filename: str) -> None:
+        """
+        Save the current graph to a file.
 
-        for i in range(rounds):
-            arm = mab.select_arm()
+        Parameters:
+            filename: The name of the file to save to.
+        """
+        GraphRenderer.save_graph(self._graph, self._edge_decisions_matrix, filename)
 
-            # Convert the arm index to an edge
-            edge = self._edge_idx_to_edge(arm)
+    def add_edge(self, src: str, dst: str) -> None:
+        """
+        Add an edge to the graph.
 
-            # Add or remove the edge from the graph
-            if current_graph.has_edge(*edge):
-                current_graph.remove_edge(*edge)
-            else:
-                current_graph.add_edge(*edge)
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+        """
+        self._graph.add_edge(src, dst)
 
-            # Check if the new graph is acceptable otherwise undo change and skip this iteration
-            if not self._graph_is_acceptable(current_graph):
-                if current_graph.has_edge(*edge):
-                    current_graph.remove_edge(*edge)
-                else:
-                    current_graph.add_edge(*edge)
-                continue
+    def remove_edge(self, src: str, dst: str) -> None:
+        """
+        Remove an edge from the graph.
 
-            # Calculate the ATE of the treatment on the outcome using the new graph
-            new_ate = ATECalculator.get_ate_and_confidence(
-                self._data,
-                self._treatment_idx,
-                self._outcome_idx,
-                current_graph,
-            )["ATE"]
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+        """
+        self._graph.remove_edge(src, dst)
 
-            # Update the reward of the selected arm
-            reward = abs(new_ate - original_ate)
-            mab.update(arm, reward)
+    def fix_edge_in_graph(self, src: str, dst: str) -> None:
+        """
+        Mark an edge as accepted and mark its reverse as rejected.
 
-        return current_graph
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+        """
+        self._edge_decisions_matrix.mark_edge(src, dst, "Accepted")
+        self._edge_decisions_matrix.mark_edge(dst, src, "Rejected")
+
+    def fix_edge_outside_graph(self, src: str, dst: str) -> None:
+        """
+        Mark an edge as rejected.
+
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+        """
+        self._edge_decisions_matrix.mark_edge(src, dst, "Rejected")
+
+   
+
+  

@@ -3,6 +3,7 @@ import base64
 from io import BytesIO
 from IPython.display import display, HTML
 import matplotlib.pyplot as plt
+from .edge_state_matrix import EdgeStateMatrix
 
 
 class GraphRenderer:
@@ -11,12 +12,14 @@ class GraphRenderer:
     """
 
     @staticmethod
-    def draw_graph(graph: nx.DiGraph) -> str:
+    def draw_graph(graph: nx.DiGraph, esm: EdgeStateMatrix) -> str:
         """
         Draw a graph with appropriate margins and node tags.
 
         Parameters:
             graph: The graph to be drawn.
+            esm: The edge state matrix to be used to determine
+                the color of the edges.
 
         Returns:
             A base64-encoded string representation of the graph.
@@ -32,11 +35,19 @@ class GraphRenderer:
             with_labels=False,
             width=2.0,
             node_color="#d3d3d3",
-            edge_color=[graph[u][v].get("color", "#7f9aba") for u, v in graph.edges()],
         )
         text = nx.draw_networkx_labels(graph, pos, font_size=12)
         for _, t in text.items():
             t.set_rotation(30)
+
+        # Color the edges based on the edge state matrix
+        # Edges are green if they are accepted and orange if they are undecided
+        for i in range(esm.n):
+            for j in range(esm.n):
+                if esm.m[i, j] == 1:
+                    graph[esm.name(i)][esm.name(j)]["color"] = "#00FF25"
+                elif esm.m[i, j] == 0:
+                    graph[esm.name(i)][esm.name(j)]["color"] = "#FFA500"
 
         # Fix margins
         x_values, y_values = zip(*pos.values())
@@ -58,15 +69,17 @@ class GraphRenderer:
         return img_str
 
     @staticmethod
-    def save_graph(graph: nx.DiGraph, filename: str) -> None:
+    def save_graph(graph: nx.DiGraph, esm: EdgeStateMatrix, filename: str) -> None:
         """
         Save the graph to a file as a png image.
 
         Parameters:
             graph: The graph to be saved.
+            esm: The edge state matrix to be used to determine
+                the color of the edges.
             filename: The name of the file to which the graph should be saved.
         """
-        img_str = GraphRenderer.draw_graph(graph)
+        img_str = GraphRenderer.draw_graph(graph, esm)
         with open(filename, "wb") as f:
             f.write(base64.b64decode(img_str))
 
@@ -85,11 +98,15 @@ class GraphRenderer:
         )
 
     @staticmethod
-    def display_graph(graph: nx.DiGraph) -> None:
+    def display_graph(graph: nx.DiGraph, esm: EdgeStateMatrix) -> None:
         """
         Display the graph.
 
         Parameters:
             graph: The graph to be displayed.
+            esm: The edge state matrix to be used to determine
+                the color of the edges.
         """
-        display(GraphRenderer.graph_string_to_html(GraphRenderer.draw_graph(graph)))
+        display(
+            GraphRenderer.graph_string_to_html(GraphRenderer.draw_graph(graph, esm))
+        )
