@@ -94,10 +94,6 @@ class ECCSUI:
             submitted = st.form_submit_button(
                 "Select treatment",
                 on_click=on_click_select_treatment,
-                disabled=(
-                    "is_treatment_chosen" in st.session_state
-                    and st.session_state["is_treatment_chosen"]
-                ),
             )
 
             if submitted:
@@ -120,10 +116,6 @@ class ECCSUI:
             submitted = st.form_submit_button(
                 "Select outcome",
                 on_click=on_click_select_outcome,
-                disabled=(
-                    "is_outcome_chosen" in st.session_state
-                    and st.session_state["is_outcome_chosen"]
-                ),
             )
 
             if submitted:
@@ -201,7 +193,7 @@ class ECCSUI:
             st.session_state["graph"] = self.eccs.draw_graph()
 
         with st.form("fix_edge_form"):
-            st.subheader("Fix an edge in graph:")
+            st.subheader("Fix an edge in the graph:")
             st.markdown("You cannot fix an edge that is in the `banlist`.")
             source_col, destination_col = st.columns(2)
 
@@ -270,3 +262,19 @@ class ECCSUI:
                 st.form_submit_button("Ban", on_click=on_click_ban)
             with rej_col:
                 st.form_submit_button("Unban", on_click=on_click_unban)
+
+    def prompt_calculate_current_ate(self):
+        pass
+
+    def prompt_press_eccs(self):
+        pass    
+
+    def prompt_calculate_future_ate(self):
+        pass
+
+    def prompt_show_suggested_graph(self):
+        pass   
+
+    def prompt_show_suggested_modifications(self):
+        pass
+

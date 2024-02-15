@@ -50,11 +50,7 @@ with st.sidebar:
     eccs_ui.prompt_select_file()
 
 if "is_file_chosen" in st.session_state and st.session_state["is_file_chosen"]:
-#     left, right = st.columns(2)
-#     with left:
-#         eccs_ui.prompt_select_treatment()
-#     with right:
-#         eccs_ui.prompt_select_outcome()
+
 
 # if (
 #     "is_treatment_chosen" in st.session_state
@@ -62,7 +58,7 @@ if "is_file_chosen" in st.session_state and st.session_state["is_file_chosen"]:
 #     and "is_outcome_chosen" in st.session_state
 #     and st.session_state["is_outcome_chosen"]
 # ):
-    st.markdown('<hr style="border:1px solid lightgray">', unsafe_allow_html=True)
+#    st.markdown('<hr style="border:1px solid lightgray">', unsafe_allow_html=True)
 
     # Row about deciding on edges
     st.subheader("Refine your causal graph:")
@@ -70,8 +66,11 @@ if "is_file_chosen" in st.session_state and st.session_state["is_file_chosen"]:
     with col_1:
         eccs_ui.prompt_edit_graph()
         eccs_ui.prompt_fix_edge()
-        eccs_ui.prompt_ban_edge()
     with col_2:
+        eccs_ui.prompt_ban_edge()
+        with st.expander("Banlist", expanded=True): 
+            st.dataframe(eccs_ui.eccs.banlist)
+    with col_3:
         with st.expander("Causal graph", expanded=True):
             if "graph" in st.session_state:
                 components.v1.html(
@@ -80,9 +79,23 @@ if "is_file_chosen" in st.session_state and st.session_state["is_file_chosen"]:
                     )._repr_html_(),
                     height=500,
                 )
-    with col_3:
-        with st.expander("Banlist", expanded=True): 
-            st.dataframe(eccs_ui.eccs.banlist)
+    
         
 
     st.markdown('<hr style="border:1px solid lightgray">', unsafe_allow_html=True)
+
+    st.subheader("Get suggested modifications:")
+
+    col_1, col_2, col_3 = st.columns([0.3, 0.3, 0.3])
+    with col_1:
+        eccs_ui.prompt_select_treatment()
+        eccs_ui.prompt_select_outcome()
+    with col_2:
+        eccs_ui.prompt_calculate_current_ate()
+        eccs_ui.prompt_press_eccs()
+        eccs_ui.prompt_calculate_future_ate()
+    with col_3:
+        eccs_ui.prompt_show_suggested_graph()
+        eccs_ui.prompt_show_suggested_modifications()
+ 
+            
