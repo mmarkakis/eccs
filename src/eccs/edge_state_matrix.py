@@ -138,6 +138,45 @@ class EdgeStateMatrix:
             return "Accepted"
         else:
             raise ValueError(f"Invalid edge state {state}")
+        
+    def edge_is_undecided(self, src: str, dst: str) -> bool:
+        """
+        Check if an edge is undecided.
+
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+
+        Returns:
+            True if the edge is undecided, False otherwise.
+        """
+        return self.get_edge_state(src, dst) == "Undecided"
+    
+    def edge_is_accepted(self, src: str, dst: str) -> bool:
+        """
+        Check if an edge is accepted.
+
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+
+        Returns:
+            True if the edge is accepted, False otherwise.
+        """
+        return self.get_edge_state(src, dst) == "Accepted"
+    
+    def edge_is_rejected(self, src: str, dst: str) -> bool:
+        """
+        Check if an edge is rejected.
+
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+
+        Returns:
+            True if the edge is rejected, False otherwise.
+        """
+        return self.get_edge_state(src, dst) == "Rejected"
 
     def mark_edge(self, src: str | int, dst: str| int, state: str) -> None:
         """

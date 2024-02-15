@@ -7,9 +7,7 @@ from .graph_renderer import GraphRenderer
 
 class ECCS:
 
-    def __init__(
-        self, data_path: str, graph_path: Optional[str]
-    ):
+    def __init__(self, data_path: str, graph_path: Optional[str]):
         """
         Initialize the ECCS object.
 
@@ -24,7 +22,6 @@ class ECCS:
         self._data = pd.read_csv(data_path)
         self._num_vars = self._data.shape[1]
 
-
         if graph_path is not None:
             # Load the graph from a file in DOT format into a networkx DiGraph object
             self._graph = nx.DiGraph(nx.nx_pydot.read_dot(graph_path))
@@ -33,13 +30,46 @@ class ECCS:
             self._graph.add_nodes_from(range(self._num_vars))
 
         self._edge_decisions_matrix = EdgeStateMatrix(list(self._data.columns))
-        self._edge_decisions_matrix.clear_and_set_from_graph(
-            self._graph, mark_missing_as="Undecided"
-        )
 
         # Initialize the banlist to include all self-edges
         for i in range(self._num_vars):
-            self._edge_decisions_matrix.mark_edge(i, i, "Rejected")
+            self.ban_edge(self._data.columns[i], self._data.columns[i])
+
+
+    @property
+    def data(self) -> pd.DataFrame:
+        """
+        Returns the data.
+        """
+        return self._data
+
+    @property
+    def banlist(self) -> pd.DataFrame:
+        """
+        Returns the banlist, which includes all edges marked as rejected,
+        except for self-edges.
+        """
+        banlist = pd.DataFrame(columns=["Source", "Destination"])
+        for i in range(self._num_vars):
+            for j in range(self._num_vars):
+                if i != j and self.is_edge_banned(
+                    self._data.columns[i], self._data.columns[j]
+                ):
+                    banlist = pd.concat(
+                        [
+                            banlist,
+                            pd.DataFrame(
+                                {
+                                    "Source": self._data.columns[i],
+                                    "Destination": self._data.columns[j],
+                                },
+                                index=[0],
+                            ),
+                        ],
+                        ignore_index=True,
+                    )
+
+        return banlist
 
     def set_treatment(self, treatment: str) -> None:
         """
@@ -84,7 +114,7 @@ class ECCS:
         return nx.is_directed_acyclic_graph(graph) and nx.has_path(
             graph, self._treatment, self._outcome
         )
-    
+
     def clear_graph(self, clear_edge_states: bool = True) -> None:
         """
         Clear the graph and possibly edge states.
@@ -102,6 +132,17 @@ class ECCS:
         """
         GraphRenderer.display_graph(self._graph, self._edge_decisions_matrix)
 
+    def draw_graph(self) -> str:
+        """
+        Draw the current graph.
+
+        Returns:
+            A base64-encoded string representation of the graph.
+        """
+        print(type(self._graph))
+        print(type(self._edge_decisions_matrix))
+        return GraphRenderer.draw_graph(self._graph, self._edge_decisions_matrix)
+
     def save_graph(self, filename: str) -> None:
         """
         Save the current graph to a file.
@@ -113,45 +154,115 @@ class ECCS:
 
     def add_edge(self, src: str, dst: str) -> None:
         """
-        Add an edge to the graph.
+        Add an edge to the graph. Does nothing if we try to add an edge that is banned.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        self._graph.add_edge(src, dst)
+        if not self._edge_decisions_matrix.edge_is_rejected(src, dst):   
+            self._graph.add_edge(src, dst)
 
     def remove_edge(self, src: str, dst: str) -> None:
         """
-        Remove an edge from the graph.
+        Remove an edge from the graph and then remove any nodes with degree zero.
+        Does nothing if we try to remove an edge that is fixed.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        self._graph.remove_edge(src, dst)
+        if not self._edge_decisions_matrix.edge_is_accepted(src, dst):     
+            self._graph.remove_edge(src, dst)
+            self._graph.remove_nodes_from(list(nx.isolates(self._graph)))
 
-    def fix_edge_in_graph(self, src: str, dst: str) -> None:
+    def fix_edge(self, src: str, dst: str) -> None:
         """
-        Mark an edge as accepted and mark its reverse as rejected.
+        Mark an edge as fixed and mark its reverse as banned. If the
+        edge is not in the graph, it is added.
+
+        Does nothing if the edge is already fixed or banned.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        self._edge_decisions_matrix.mark_edge(src, dst, "Accepted")
-        self._edge_decisions_matrix.mark_edge(dst, src, "Rejected")
+        if self._edge_decisions_matrix.edge_is_undecided(src, dst):
+            self._edge_decisions_matrix.mark_edge(src, dst, "Accepted")
+            self._edge_decisions_matrix.mark_edge(dst, src, "Rejected")
+            if not self._graph.has_edge(src, dst):
+                self.add_edge(src, dst)
 
-    def fix_edge_outside_graph(self, src: str, dst: str) -> None:
+    def ban_edge(self, src: str, dst: str) -> None:
         """
-        Mark an edge as rejected.
+        Mark an edge as banned. If the edge is in the graph, it is removed.
+
+        Does nothing if the edge is already banned or fixed.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        self._edge_decisions_matrix.mark_edge(src, dst, "Rejected")
+        if self._edge_decisions_matrix.edge_is_undecided(src, dst):
+            self._edge_decisions_matrix.mark_edge(src, dst, "Rejected")
+            if self._graph.has_edge(src, dst):
+                self.remove_edge(src, dst)
 
-   
+    def mark_edge_undecided(self, src: str, dst: str) -> None:
+        """
+        Mark an edge as not banned or fixed.
 
-  
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+        """
+        self._edge_decisions_matrix.mark_edge(src, dst, "Undecided")
+
+    def unban_edge(self, src: str, dst: str) -> None:
+        """
+        Mark an edge as not banned. Does nothing if the edge is the
+        reverse of a fixed edge.
+
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+        """
+        if not self.is_edge_fixed(dst, src):
+            self.mark_edge_undecided(src, dst)
+
+    def unfix_edge(self, src: str, dst: str) -> None:
+        """
+        Mark an edge as not fixed.
+
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+        """
+        self.mark_edge_undecided(src, dst)
+        self.mark_edge_undecided(dst, src)
+
+    def is_edge_fixed(self, src: str, dst: str) -> bool:
+        """
+        Check if an edge is fixed.
+
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+
+        Returns:
+            True if the edge is fixed, False otherwise.
+        """
+        return self._edge_decisions_matrix.edge_is_accepted(src, dst)
+
+    def is_edge_banned(self, src: str, dst: str) -> bool:
+        """
+        Check if an edge is banned.
+
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+
+        Returns:
+            True if the edge is banned, False otherwise.
+        """
+        return self._edge_decisions_matrix.edge_is_rejected(src, dst)
