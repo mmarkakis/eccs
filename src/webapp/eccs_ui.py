@@ -5,16 +5,20 @@ from eccs.eccs import ECCS
 import streamlit as st
 
 DATASET_INFO = {
-    "PostgreSQL": {
-        "path": "../datasets_raw/tpc-ds/parameter_sweep_1_filtered.log",
-        "workdir": "../datasets/tpc-ds",
+    "XYZ": {
+        "path": "../../datasets/xyz_extended/dataset_2024-02-14_21:07:53.csv",
     }
 }
 
 GRAPH_INFO = {
-    "PostgreSQL_1": {
-        "path": "../datasets_raw/tpc-ds/parameter_sweep_1_filtered.dot",
-        "workdir": "../datasets/tpc-ds",
+    "XYZ_simple": {
+        "path": "../../datasets/xyz_extended/dataset_2024-02-14_21:07:53_simple.dot",
+    }, 
+    "XYZ_correct": {
+        "path": "../../datasets/xyz_extended/dataset_2024-02-14_21:07:53_correct.dot",
+    }, 
+    "XYZ_incorrect": {
+        "path": "../../datasets/xyz_extended/dataset_2024-02-14_21:07:53_incorrect.dot",
     }
 }
 

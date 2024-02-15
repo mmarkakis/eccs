@@ -139,13 +139,13 @@ class EdgeStateMatrix:
         else:
             raise ValueError(f"Invalid edge state {state}")
 
-    def mark_edge(self, src: str, dst: str, state: str) -> None:
+    def mark_edge(self, src: str | int, dst: str| int, state: str) -> None:
         """
         Mark an edge as being in a specified state.
 
         Parameters:
-            src: The name of the source variable.
-            dst: The name of the destination variable.
+            src: The name or index of the source variable.
+            dst: The name or index of the destination variable.
             state: The state to mark the edge with (Accepted, Rejected, or Undecided).
 
 
@@ -153,8 +153,8 @@ class EdgeStateMatrix:
             ValueError: If `state` is not one of "Accepted", "Rejected", or "Undecided".
         """
 
-        src_idx = self.idx(src)
-        dst_idx = self.idx(dst)
+        src_idx = self.idx(src) if type(src) == str else src
+        dst_idx = self.idx(dst) if type(dst) == str else dst
 
         if state == "Accepted":
             self._m[src_idx][dst_idx] = 1

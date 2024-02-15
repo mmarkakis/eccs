@@ -32,13 +32,14 @@ class ECCS:
             self._graph = nx.DiGraph()
             self._graph.add_nodes_from(range(self._num_vars))
 
-        self._edge_decisions_matrix = EdgeStateMatrix(self._data.columns)
+        self._edge_decisions_matrix = EdgeStateMatrix(list(self._data.columns))
         self._edge_decisions_matrix.clear_and_set_from_graph(
             self._graph, mark_missing_as="Undecided"
         )
 
         # Initialize the banlist to include all self-edges
-        self._banlist = [self._edge_to_edge_idx((i, i)) for i in range(self.num_vars)]
+        for i in range(self._num_vars):
+            self._edge_decisions_matrix.mark_edge(i, i, "Rejected")
 
     def set_treatment(self, treatment: str) -> None:
         """
