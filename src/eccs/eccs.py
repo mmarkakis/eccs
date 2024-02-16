@@ -4,9 +4,13 @@ import networkx as nx
 from .edge_state_matrix import EdgeState, EdgeStateMatrix
 from .graph_renderer import GraphRenderer
 from .ate import ATECalculator
+from itertools import product
+from tqdm.auto import tqdm
 
 
 class ECCS:
+
+    EDGE_SUGGESTION_METHODS = ["Best single edge change"]
 
     def __init__(self, data_path: str, graph_path: Optional[str]):
         """
@@ -123,8 +127,6 @@ class ECCS:
         Returns:
             A base64-encoded string representation of the graph.
         """
-        print(type(self._graph))
-        print(type(self._edge_decisions_matrix))
         return GraphRenderer.draw_graph(self._graph, self._edge_decisions_matrix)
 
     def save_graph(self, filename: str) -> None:
@@ -149,18 +151,20 @@ class ECCS:
             self._graph.add_edge(src, dst)
             self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.PRESENT)
 
-    def remove_edge(self, src: str, dst: str) -> None:
+    def remove_edge(self, src: str, dst: str, remove_isolates: bool = True) -> None:
         """
-        Remove an edge from the graph and then remove any nodes with degree zero.
+        Remove an edge from the graph and then optionally remove any nodes with degree zero.
         Can only remove an edge if its current state is present.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
+            remove_isolates: Whether to remove any nodes with degree zero after removing the edge.
         """
         if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.PRESENT):
             self._graph.remove_edge(src, dst)
-            self._graph.remove_nodes_from(list(nx.isolates(self._graph)))
+            if remove_isolates:
+                self._graph.remove_nodes_from(list(nx.isolates(self._graph)))
             self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.ABSENT)
 
     def fix_edge(self, src: str, dst: str) -> None:
@@ -263,7 +267,6 @@ class ECCS:
 
         if graph is None:
             graph = self._graph
-            print(graph)
         if treatment is None:
             treatment = self._treatment
         if outcome is None:
@@ -275,3 +278,97 @@ class ECCS:
         return ATECalculator.get_ate_and_confidence(
             self.data, treatment_idx=treatment_idx, outcome_idx=outcome_idx, graph=graph
         )["ATE"]
+
+    def suggest(self, method: str) -> tuple[float, nx.DiGraph, pd.DataFrame]:
+        """
+        Suggest a modification to the graph that yields a maximally different ATE,
+        compared to the current ATE. The modification should not edit edges that are
+        currently fixed or banned. The method used for suggestion is specified by `method`.
+
+        Parameters:
+            method: The method to use for suggestion. Must be in ECCS.EDGE_SUGGESTION_METHODS.
+
+        Returns:
+            A tuple containing the suggested ATE, the suggested graph, and the suggested
+                modification(s) as a dataframe.
+
+        Raises:
+            ValueError: If `method` is not in ECCS.EDGE_SUGGESTION_METHODS.
+        """
+
+        if method not in ECCS.EDGE_SUGGESTION_METHODS:
+            raise ValueError(f"Invalid method: {method}")
+
+        if method == "Best single edge change":
+            return self._suggest_best_single_edge_change()
+
+    def _suggest_best_single_edge_change(
+        self,
+    ) -> Tuple[float, nx.DiGraph, pd.DataFrame]:
+        """
+        Suggest the best single edge change that maximally changes the ATE.
+
+        Returns:
+            A tuple containing the suggested ATE, the suggested graph, and the suggested
+                modification(s) as a dataframe.
+        """
+
+        best_ate = self.get_ate()
+        best_graph = self._graph.copy()
+        best_modifications = pd.DataFrame(columns=["Source", "Destination", "Change"])
+
+        # iterate over all pairs of variables using tqdm
+        for i, j in tqdm(
+            product(range(self._num_vars), range(self._num_vars)),
+            total=self._num_vars**2,
+        ):
+
+            src = self._data.columns[i]
+            dst = self._data.columns[j]
+
+            forward_state = self._edge_decisions_matrix.get_edge_state(src, dst)
+            reverse_state = self._edge_decisions_matrix.get_edge_state(dst, src)
+
+            if forward_state == EdgeState.ABSENT and reverse_state == EdgeState.ABSENT:
+                self.add_edge(src, dst)
+                if self._graph_is_acceptable(self._graph):
+                    new_ate = self.get_ate()
+                    if abs(new_ate - best_ate) > 0:
+                        best_ate = new_ate
+                        best_graph = self.draw_graph()
+
+                        best_modifications = pd.DataFrame(
+                            [[src, dst, "Add"]],
+                            columns=["Source", "Destination", "Change"],
+                        )
+                self.remove_edge(src, dst)
+            elif (
+                forward_state == EdgeState.ABSENT and reverse_state == EdgeState.PRESENT
+            ):
+                self.remove_edge(dst, src, remove_isolates=False)
+                self.add_edge(src, dst)
+                if self._graph_is_acceptable(self._graph):
+                    new_ate = self.get_ate()
+                    if abs(new_ate - best_ate) > 0:
+                        best_ate = new_ate
+                        best_graph = self.draw_graph()
+                        best_modifications = pd.DataFrame(
+                            [[dst, src, "Flip"]],
+                            columns=["Source", "Destination", "Change"],
+                        )
+                self.remove_edge(src, dst, remove_isolates=False)
+                self.add_edge(dst, src)
+            elif forward_state == EdgeState.PRESENT:
+                self.remove_edge(src, dst, remove_isolates=False)
+                if self._graph_is_acceptable(self._graph):
+                    new_ate = self.get_ate()
+                    if abs(new_ate - best_ate) > 0:
+                        best_ate = new_ate
+                        best_graph = self.draw_graph()
+                        best_modifications = pd.DataFrame(
+                            [[src, dst, "Remove"]],
+                            columns=["Source", "Destination", "Change"],
+                        )
+                self.add_edge(src, dst)
+
+        return best_ate, best_graph, best_modifications
