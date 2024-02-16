@@ -40,10 +40,6 @@ class GraphRenderer:
         """
         if graph.number_of_nodes() == 0:
             return ""
-        
-        print(EDGE_STYLES)
-        print([esm.get_edge_state(src, dst) for src, dst in graph.edges()])
-        print(graph.edges())
 
         edge_colors = [
             EDGE_STYLES[esm.get_edge_state(src, dst)]["color"]
@@ -53,7 +49,6 @@ class GraphRenderer:
             EDGE_STYLES[esm.get_edge_state(src, dst)]["style"]
             for src, dst in graph.edges()
         ]
-
 
         pos = None
         if (
