@@ -3,11 +3,18 @@ import base64
 from io import BytesIO
 from IPython.display import display, HTML
 import matplotlib.pyplot as plt
-from .edge_state_matrix import EdgeStateMatrix
+from .edge_state_matrix import EdgeState, EdgeStateMatrix
 from typing import Optional
 
+EDGE_BLUE = "#7f9aba"
 EDGE_GREEN = "#00FF25"
 EDGE_ORANGE = "#FFA500"
+
+EDGE_STYLES = {
+    EdgeState.FIXED: {"color": EDGE_BLUE, "style": "solid"},
+    EdgeState.PRESENT: {"color": EDGE_BLUE, "style": "dashed"},
+    EdgeState.SUGGESTED: {"color": EDGE_ORANGE, "style": "dashed"},
+}
 
 
 class GraphRenderer:
@@ -33,15 +40,26 @@ class GraphRenderer:
         """
         if graph.number_of_nodes() == 0:
             return ""
+        
+        print(EDGE_STYLES)
+        print([esm.get_edge_state(src, dst) for src, dst in graph.edges()])
+        print(graph.edges())
 
-        # Color the edges green if they are accepted, orange if they are undecided.
         edge_colors = [
-            EDGE_GREEN if esm.m[esm.idx(src), esm.idx(dst)] == 1 else EDGE_ORANGE
+            EDGE_STYLES[esm.get_edge_state(src, dst)]["color"]
+            for src, dst in graph.edges()
+        ]
+        edge_styles = [
+            EDGE_STYLES[esm.get_edge_state(src, dst)]["style"]
             for src, dst in graph.edges()
         ]
 
+
         pos = None
-        if GraphRenderer.most_recent_pos is not None and GraphRenderer.most_recent_nodeset == set(graph.nodes()):
+        if (
+            GraphRenderer.most_recent_pos is not None
+            and GraphRenderer.most_recent_nodeset == set(graph.nodes())
+        ):
             pos = GraphRenderer.most_recent_pos
         else:
             pos = nx.spring_layout(graph)
@@ -56,6 +74,7 @@ class GraphRenderer:
             width=2.0,
             node_color="#d3d3d3",
             edge_color=edge_colors,
+            style=edge_styles,
         )
         text = nx.draw_networkx_labels(graph, pos, font_size=12)
         for _, t in text.items():

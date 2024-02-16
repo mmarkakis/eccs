@@ -1,8 +1,9 @@
 from typing import Optional, Tuple
 import pandas as pd
 import networkx as nx
-from .edge_state_matrix import EdgeStateMatrix
+from .edge_state_matrix import EdgeState, EdgeStateMatrix
 from .graph_renderer import GraphRenderer
+from .ate import ATECalculator
 
 
 class ECCS:
@@ -22,19 +23,20 @@ class ECCS:
         self._data = pd.read_csv(data_path)
         self._num_vars = self._data.shape[1]
 
-        if graph_path is not None:
-            # Load the graph from a file in DOT format into a networkx DiGraph object
-            self._graph = nx.DiGraph(nx.nx_pydot.read_dot(graph_path))
-        else:
-            self._graph = nx.DiGraph()
-            self._graph.add_nodes_from(range(self._num_vars))
-
         self._edge_decisions_matrix = EdgeStateMatrix(list(self._data.columns))
 
-        # Initialize the banlist to include all self-edges
+        self._graph = nx.DiGraph()
+        if graph_path is not None:
+            # Load the graph from a file in DOT format into a networkx DiGraph object
+            graph = nx.DiGraph(nx.nx_pydot.read_dot(graph_path))
+            for edge in graph.edges():
+                self.add_edge(edge[0], edge[1])
+        else:
+            self._graph.add_nodes_from(range(self._num_vars))
+
+        # Ban self edges.
         for i in range(self._num_vars):
             self.ban_edge(self._data.columns[i], self._data.columns[i])
-
 
     @property
     def data(self) -> pd.DataFrame:
@@ -44,32 +46,14 @@ class ECCS:
         return self._data
 
     @property
-    def banlist(self) -> pd.DataFrame:
+    def banlist_df(self) -> pd.DataFrame:
         """
-        Returns the banlist, which includes all edges marked as rejected,
-        except for self-edges.
+        Returns the banlist as a dataframe, except for self edges
         """
-        banlist = pd.DataFrame(columns=["Source", "Destination"])
-        for i in range(self._num_vars):
-            for j in range(self._num_vars):
-                if i != j and self.is_edge_banned(
-                    self._data.columns[i], self._data.columns[j]
-                ):
-                    banlist = pd.concat(
-                        [
-                            banlist,
-                            pd.DataFrame(
-                                {
-                                    "Source": self._data.columns[i],
-                                    "Destination": self._data.columns[j],
-                                },
-                                index=[0],
-                            ),
-                        ],
-                        ignore_index=True,
-                    )
-
-        return banlist
+        banlist = self._edge_decisions_matrix.ban_list
+        banlist_df = pd.DataFrame(banlist, columns=["Source", "Destination"])
+        banlist_df = banlist_df[banlist_df["Source"] != banlist_df["Destination"]]
+        return banlist_df
 
     def set_treatment(self, treatment: str) -> None:
         """
@@ -124,7 +108,7 @@ class ECCS:
         """
         self._graph = nx.DiGraph()
         if clear_edge_states:
-            self._edge_states = EdgeStateMatrix(self.prepared_variable_names)
+            self._edge_states = EdgeStateMatrix(list(self._data.columns))
 
     def display_graph(self) -> None:
         """
@@ -154,92 +138,83 @@ class ECCS:
 
     def add_edge(self, src: str, dst: str) -> None:
         """
-        Add an edge to the graph. Does nothing if we try to add an edge that is banned.
+        Add an edge to the graph and mark it as present.
+        Can only add an edge if its current state is absent.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        if not self._edge_decisions_matrix.edge_is_rejected(src, dst):   
+        if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.ABSENT):
             self._graph.add_edge(src, dst)
+            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.PRESENT)
 
     def remove_edge(self, src: str, dst: str) -> None:
         """
         Remove an edge from the graph and then remove any nodes with degree zero.
-        Does nothing if we try to remove an edge that is fixed.
+        Can only remove an edge if its current state is present.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        if not self._edge_decisions_matrix.edge_is_accepted(src, dst):     
+        if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.PRESENT):
             self._graph.remove_edge(src, dst)
             self._graph.remove_nodes_from(list(nx.isolates(self._graph)))
+            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.ABSENT)
 
     def fix_edge(self, src: str, dst: str) -> None:
         """
-        Mark an edge as fixed and mark its reverse as banned. If the
-        edge is not in the graph, it is added.
-
-        Does nothing if the edge is already fixed or banned.
+        Mark an edge as fixed and mark its reverse as banned.
+        Can only fix an edge if its current state is present.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        if self._edge_decisions_matrix.edge_is_undecided(src, dst):
-            self._edge_decisions_matrix.mark_edge(src, dst, "Accepted")
-            self._edge_decisions_matrix.mark_edge(dst, src, "Rejected")
-            if not self._graph.has_edge(src, dst):
-                self.add_edge(src, dst)
+
+        if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.PRESENT):
+            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.FIXED)
+            self._edge_decisions_matrix.mark_edge(dst, src, EdgeState.BANNED)
 
     def ban_edge(self, src: str, dst: str) -> None:
         """
-        Mark an edge as banned. If the edge is in the graph, it is removed.
-
-        Does nothing if the edge is already banned or fixed.
-
-        Parameters:
-            src: The name of the source variable.
-            dst: The name of the destination variable.
-        """
-        if self._edge_decisions_matrix.edge_is_undecided(src, dst):
-            self._edge_decisions_matrix.mark_edge(src, dst, "Rejected")
-            if self._graph.has_edge(src, dst):
-                self.remove_edge(src, dst)
-
-    def mark_edge_undecided(self, src: str, dst: str) -> None:
-        """
-        Mark an edge as not banned or fixed.
+        Mark an edge as banned.
+        Can only ban an edge if its current state is absent.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        self._edge_decisions_matrix.mark_edge(src, dst, "Undecided")
+        if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.ABSENT):
+            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.BANNED)
 
     def unban_edge(self, src: str, dst: str) -> None:
         """
-        Mark an edge as not banned. Does nothing if the edge is the
-        reverse of a fixed edge.
+        Mark a banned edge as absent, as long as its reverse is not fixed.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        if not self.is_edge_fixed(dst, src):
-            self.mark_edge_undecided(src, dst)
+        if self._edge_decisions_matrix.is_edge_in_state(
+            src, dst, EdgeState.BANNED
+        ) and not self._edge_decisions_matrix.is_edge_in_state(
+            dst, src, EdgeState.FIXED
+        ):
+            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.ABSENT)
 
     def unfix_edge(self, src: str, dst: str) -> None:
         """
-        Mark an edge as not fixed.
+        Mark a fixed edge as present and its (previously banned) reverse as absent.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        self.mark_edge_undecided(src, dst)
-        self.mark_edge_undecided(dst, src)
+        if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.FIXED):
+            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.PRESENT)
+            self._edge_decisions_matrix.mark_edge(dst, src, EdgeState.ABSENT)
 
     def is_edge_fixed(self, src: str, dst: str) -> bool:
         """
@@ -252,7 +227,7 @@ class ECCS:
         Returns:
             True if the edge is fixed, False otherwise.
         """
-        return self._edge_decisions_matrix.edge_is_accepted(src, dst)
+        return self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.FIXED)
 
     def is_edge_banned(self, src: str, dst: str) -> bool:
         """
@@ -265,4 +240,38 @@ class ECCS:
         Returns:
             True if the edge is banned, False otherwise.
         """
-        return self._edge_decisions_matrix.edge_is_rejected(src, dst)
+        return self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.BANNED)
+
+    def get_ate(
+        self,
+        graph: Optional[nx.DiGraph] = None,
+        treatment: Optional[str] = None,
+        outcome: Optional[str] = None,
+    ) -> float:
+        """
+        Calculate the average treatment effect (ATE) of `treatment` on `outcome` given `graph`.
+        If any of these parameters are not provided, the corresponding instance variables are used.
+
+        Parameters:
+            graph: The graph to use for the calculation.
+            treatment: The treatment variable.
+            outcome: The outcome variable.
+
+        Returns:
+            The ATE.
+        """
+
+        if graph is None:
+            graph = self._graph
+            print(graph)
+        if treatment is None:
+            treatment = self._treatment
+        if outcome is None:
+            outcome = self._outcome
+
+        treatment_idx = self._data.columns.get_loc(treatment)
+        outcome_idx = self._data.columns.get_loc(outcome)
+
+        return ATECalculator.get_ate_and_confidence(
+            self.data, treatment_idx=treatment_idx, outcome_idx=outcome_idx, graph=graph
+        )["ATE"]
