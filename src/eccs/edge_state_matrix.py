@@ -177,7 +177,7 @@ class EdgeStateMatrix:
             A list of all edges in the specified state.
         """
         rows, cols = np.asarray(self.m == state).nonzero()
-        return [(rows[i], cols[i]) for i in range(len(rows))]
+        return [(self.name(rows[i]), self.name(cols[i])) for i in range(len(rows))]
 
     @property
     def fixed_list(self) -> list[tuple[str, str]]:
@@ -188,7 +188,7 @@ class EdgeStateMatrix:
             A list of all edges that are fixed.
         """
         return self._all_edges_in_state(EdgeState.FIXED)
-    
+
     @property
     def ban_list(self) -> list[tuple[str, str]]:
         """

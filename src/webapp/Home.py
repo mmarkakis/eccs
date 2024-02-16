@@ -9,12 +9,10 @@ from utils import (
     reset_session_button,
     display_current_info,
 )
-from streamlit import components
 import os
 from io import StringIO
 import pandas as pd
 from eccs_ui import ECCSUI
-from eccs.graph_renderer import GraphRenderer
 
 
 st.set_page_config(page_title="Home", page_icon="🏠", layout="wide")
@@ -62,15 +60,8 @@ if "is_file_chosen" in st.session_state and st.session_state["is_file_chosen"]:
         with st.expander("Banlist", expanded=True):
             st.dataframe(eccs_ui.eccs.banlist_df)
     with col_3:
-        with st.expander("Current Causal graph", expanded=True):
-            if "graph" in st.session_state:
-                components.v1.html(
-                    GraphRenderer.graph_string_to_html(
-                        st.session_state["graph"]
-                    )._repr_html_(),
-                    height=300,
-                )
-
+        eccs_ui.show_current_graph()
+       
     st.markdown('<hr style="border:1px solid lightgray">', unsafe_allow_html=True)
 
     st.subheader("Get suggested modifications:")
@@ -84,29 +75,10 @@ if "is_file_chosen" in st.session_state and st.session_state["is_file_chosen"]:
         if "ate" in st.session_state:
             eccs_ui.prompt_press_eccs()
         if "future_ate" in st.session_state:
-            with st.container(border=True):
-                st.subheader("EECS Findings")
-                st.markdown(
-                    f"For the graph on the right, the ATE could be **{st.session_state['future_ate']:.3f}**"
-                )
-                is_increase = (
-                    "an increase"
-                    if st.session_state["future_ate"] > st.session_state["ate"]
-                    else "a decrease"
-                )
-                diff = abs(st.session_state["future_ate"] - st.session_state["ate"])
-                st.markdown(
-                    f"This is {is_increase} of **{diff:.3f}** from the current ATE!"
-                )
+            eccs_ui.show_eccs_findings()
     with col_3:
         if "future_graph" in st.session_state:
-            with st.expander("Alternative Causal Graph", expanded=True):
-                components.v1.html(
-                    GraphRenderer.graph_string_to_html(
-                        st.session_state["future_graph"]
-                    )._repr_html_(),
-                    height=300,
-                )
+            eccs_ui.show_future_graph()
         if "future_modifications" in st.session_state:
             with st.expander("Graph modifications", expanded=True):
                 st.write(st.session_state["future_modifications"])

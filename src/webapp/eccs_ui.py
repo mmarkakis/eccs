@@ -4,6 +4,9 @@ import sys
 sys.path.append("../")
 from eccs.eccs import ECCS
 import streamlit as st
+from eccs.graph_renderer import GraphRenderer
+from streamlit import components
+
 
 DATASET_INFO = {
     "XYZ": {
@@ -263,6 +266,16 @@ class ECCSUI:
             with rej_col:
                 st.form_submit_button("Unban", on_click=on_click_unban)
 
+    def show_current_graph(self):
+        with st.expander("Current Causal graph", expanded=True):
+            if "graph" in st.session_state:
+                components.v1.html(
+                    GraphRenderer.graph_string_to_html(
+                        st.session_state["graph"]
+                    )._repr_html_(),
+                    height=300,
+                )
+
     def prompt_calculate_current_ate(self):
 
         def on_click_calculate_current_ate():
@@ -285,15 +298,50 @@ class ECCSUI:
 
     def prompt_press_eccs(self):
         def on_click_press_eccs():
-            ##TODO: Implement this properly
-            st.session_state['future_ate'] =  0.0
-            st.session_state['future_graph'] = st.session_state["graph"]
-            st.session_state['future_modifications'] = pd.DataFrame()
+            pass
 
         with st.form("press_eccs_form"):
             st.subheader("Press ECCS to Doubt!")
+
+            # Have a dropdown for the different ECCS methods
+            eccs_method = st.selectbox(
+                "Select a method:", ECCS.EDGE_SUGGESTION_METHODS, key="eccs_method"
+            )
+
             submitted = st.form_submit_button(
                 "ECCS",
                 on_click=on_click_press_eccs,
                 disabled=not ("ate" in st.session_state),
+            )
+
+            if submitted:
+                with st.spinner("Calculating..."):
+                    ate, graph, modifications = self.eccs.suggest(method=eccs_method)
+                    st.session_state["future_ate"] = ate
+                    st.session_state["future_graph"] = graph
+                    st.session_state["future_modifications"] = modifications
+
+    def show_eccs_findings(self):
+        with st.container(border=True):
+            st.subheader("EECS Findings")
+            st.markdown(
+                f"For the graph on the right, the ATE could be **{st.session_state['future_ate']:.3f}**"
+            )
+            is_increase = (
+                "an increase"
+                if st.session_state["future_ate"] > st.session_state["ate"]
+                else "a decrease"
+            )
+            diff = abs(st.session_state["future_ate"] - st.session_state["ate"])
+            st.markdown(
+                f"This is {is_increase} of **{diff:.3f}** from the current ATE!"
+            )
+
+    def show_future_graph(self):
+        with st.expander("Alternative Causal Graph", expanded=True):
+            components.v1.html(
+                GraphRenderer.graph_string_to_html(
+                    st.session_state["future_graph"]
+                )._repr_html_(),
+                height=300,
             )
