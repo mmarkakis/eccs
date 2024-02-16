@@ -264,17 +264,36 @@ class ECCSUI:
                 st.form_submit_button("Unban", on_click=on_click_unban)
 
     def prompt_calculate_current_ate(self):
-        pass
+
+        def on_click_calculate_current_ate():
+            with st.spinner("Calculating ATE ..."):
+                st.session_state["ate"] = self.eccs.get_ate()
+
+        with st.form("calculate_current_ate_form"):
+            st.subheader("Calculate the current ATE:")
+            submitted = st.form_submit_button(
+                "Calculate ATE",
+                on_click=on_click_calculate_current_ate,
+                disabled=not (
+                    "is_treatment_chosen" in st.session_state
+                    and "is_outcome_chosen" in st.session_state
+                ),
+            )
+
+            if "ate" in st.session_state:
+                st.markdown(f"The current ATE is **{st.session_state['ate']:.3f}**")
 
     def prompt_press_eccs(self):
-        pass    
+        def on_click_press_eccs():
+            ##TODO: Implement this properly
+            st.session_state['future_ate'] =  0.0
+            st.session_state['future_graph'] = st.session_state["graph"]
+            st.session_state['future_modifications'] = pd.DataFrame()
 
-    def prompt_calculate_future_ate(self):
-        pass
-
-    def prompt_show_suggested_graph(self):
-        pass   
-
-    def prompt_show_suggested_modifications(self):
-        pass
-
+        with st.form("press_eccs_form"):
+            st.subheader("Press ECCS to Doubt!")
+            submitted = st.form_submit_button(
+                "ECCS",
+                on_click=on_click_press_eccs,
+                disabled=not ("ate" in st.session_state),
+            )
