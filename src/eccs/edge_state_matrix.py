@@ -2,34 +2,46 @@ import numpy as np
 import networkx as nx
 
 
+class EdgeState:
+    """
+    Different states that a directed edge can be in.
+    """
+
+    BANNED = -1  # Not in the graph and defintiely should not be.
+    ABSENT = 0  # Not in the graph but could go either way.
+    PRESENT = 1  # In the graph by the user's suggestion, but could go either way.
+    SUGGESTED = 2  # In the graph by the system's suggestion, but could go either way.
+    FIXED = 3  # In the graph and definitely should be.
+
+
 class EdgeStateMatrix:
     """
     A class for managing an edge state matrix.
 
     An edge state matrix is square, with the entry (i,j) representing the state
-    of the directed edge between nodes i and j. The state of an edge is one of:
-         0: The edge is undecided.
-        -1: The edge does not exist.
-         1: The edge exists.
+    of the directed edge between nodes i and j.
 
-    Self-edges are not allowed. The presence of an edge implies the absence of
-    its inverse.
+    Self-edges are not allowed. Fixing an edge bans its inverse.
     """
 
-    def __init__(self, variables: list[str]) -> None:
+    def __init__(
+        self, variables: list[str], default_state: EdgeState = EdgeState.ABSENT
+    ) -> None:
         """
-        Initialize the edge state matrix to the right dimensions and mark self-edges
-        as rejected and all other edges as undecided.
+        Initialize the edge state matrix to the right dimensions and ban all self-edges.
+        The rest of the edges are set to the provided default state.
 
         Parameters:
             variables: The variables to initialize the edge state matrix based on.
+            default_state: The default state to set the edges to.
         """
 
         n = len(variables)
         self._variables = variables
-        self._m = np.zeros((n, n))
+        self._m = np.full((n, n), default_state)
+
         for i in range(n):
-            self._m[i, i] = -1
+            self._m[i, i] = EdgeState.BANNED
 
     @property
     def m(self) -> np.ndarray:
@@ -45,31 +57,30 @@ class EdgeStateMatrix:
         """
         return self._m.shape[0]
 
-    def clear_and_set_from_graph(self, graph: nx.DiGraph, mark_missing_as:str = "Undecided") -> None:
+    def clear_and_set_from_graph(
+        self,
+        graph: nx.DiGraph,
+        state_for_edges_in_graph: EdgeState = EdgeState.PRESENT,
+        state_for_edges_not_in_graph: EdgeState = EdgeState.ABSENT,
+    ) -> None:
         """
-        Clear the edge state matrix and then set it based on the provided graph.
-        In particular, mark all edges in the graph as accepted and all others as either
-        rejected or undecided, depending on the value of `mark_missing_as`.
+        Clear the edge state matrix and then set it based on the provided graph
+        and edge states. Inverses of edges in the graph, as well as self-edges,
+        are banned.
 
         Parameters:
             graph: The graph to use to set the edge states.
-            mark_missing_as: The value to use for edges that are not in the graph.
-
-        Throws:
-            ValueError: If `mark_missing_as` is not one of "Rejected" or "Undecided".
+            state_for_edges_in_graph: The state to use for edges that are in the graph.
+            state_for_edges_not_in_graph: The state to use for edges that are not in the graph.
         """
 
-        self._m = np.zeros((self.n, self.n))
-        for edge in graph.edges:
-            print("Marking edge as accepted: ", edge)
-            self._m[self.idx(edge[0]), self.idx(edge[1])] = 1
-
-        if mark_missing_as == "Undecided":
-            self._m[self._m == 0] = 0
-        elif mark_missing_as == "Rejected":
-            self._m[self._m == 0] =  -1
-        else:
-            raise ValueError(f"Invalid value for mark_missing_as: {mark_missing_as}")
+        self._m = np.full((self.n, self.n), state_for_edges_not_in_graph)
+        for i in range(self.n):
+            for j in range(self.n):
+                if i == j:
+                    self._m[i, j] = EdgeState.BANNED
+                elif graph.has_edge(self.name(i), self.name(j)):
+                    self._m[i, j] = state_for_edges_in_graph
 
     def clear_and_set_from_matrix(self, m: np.ndarray) -> None:
         """
@@ -92,7 +103,7 @@ class EdgeStateMatrix:
             The index of the variable in the edge state matrix.
         """
         return self._variables.index(var)
-    
+
     def name(self, idx: int) -> str:
         """
         Retrieve the name of a variable in the edge state matrix.
@@ -105,103 +116,85 @@ class EdgeStateMatrix:
         """
         return self._variables[idx]
 
-    def get_edge_state(self, src: str, dst: str) -> str:
+    def get_edge_state(self, src: str | int, dst: str | int) -> EdgeState:
         """
         Get the state of a specific edge.
 
         Parameters:
-            src: The name of the source variable.
-            dst: The name of the destination variable.
+            src: The name or index of the source variable.
+            dst: The name or index of the destination variable.
 
         Returns:
-            The state of the edge (Accepted, Rejected, or Undecided).
+            The state of the edge.
         """
-        src_idx = self.idx(src)
-        dst_idx = self.idx(dst)
-        return self.edge_state_to_str(self._m[src_idx][dst_idx])
+        src_idx = self.idx(src) if type(src) == str else src
+        dst_idx = self.idx(dst) if type(dst) == str else dst
+        return self._m[src_idx][dst_idx]
 
-    def edge_state_to_str(self, state: int) -> str:
+    def is_edge_in_state(
+        self, src: str | int, dst: str | int, state: EdgeState
+    ) -> bool:
         """
-        Translate between edge value and its interpretation.
+        Check if an edge is in a specific state.
 
         Parameters:
-            state: The state of the edge represented as an integer.
+            src: The name or index of the source variable.
+            dst: The name or index of the destination variable.
+            state: The state to check for.
 
         Returns:
-            The state of the edge (Accepted, Rejected, or Undecided).
+            True if the edge is in the specified state, False otherwise.
         """
-        if state == 0:
-            return "Undecided"
-        elif state == -1:
-            return "Rejected"
-        elif state == 1:
-            return "Accepted"
-        else:
-            raise ValueError(f"Invalid edge state {state}")
+        src_idx = self.idx(src) if type(src) == str else src
+        dst_idx = self.idx(dst) if type(dst) == str else dst
+        return self.get_edge_state(src, dst) == state
 
-    def mark_edge(self, src: str, dst: str, state: str) -> None:
+    def mark_edge(self, src: str | int, dst: str | int, state: EdgeState) -> None:
         """
-        Mark an edge as being in a specified state.
+        Mark an edge as being in a specified state. Fixing an edge bans its inverse.
 
         Parameters:
-            src: The name of the source variable.
-            dst: The name of the destination variable.
-            state: The state to mark the edge with (Accepted, Rejected, or Undecided).
-
-
-        Throws:
-            ValueError: If `state` is not one of "Accepted", "Rejected", or "Undecided".
+            src: The name or index of the source variable.
+            dst: The name or index of the destination variable.
+            state: The state to mark the edge with.
         """
 
-        src_idx = self.idx(src)
-        dst_idx = self.idx(dst)
+        src_idx = self.idx(src) if type(src) == str else src
+        dst_idx = self.idx(dst) if type(dst) == str else dst
 
-        if state == "Accepted":
-            self._m[src_idx][dst_idx] = 1
-            self._m[dst_idx][src_idx] = -1
-        elif state == "Rejected":
-            self._m[src_idx][dst_idx] = -1
-        elif state == "Undecided":
-            self._m[src_idx][dst_idx] = 0
-        else:
-            raise ValueError(f"Invalid edge state {state}")
-        
+        self._m[src_idx][dst_idx] = state
+        if state == EdgeState.FIXED:
+            self._m[dst_idx][src_idx] = EdgeState.BANNED
 
-    @staticmethod
-    def enumerate_with_max_edges(n: int, max_edges: int) -> list[np.ndarray]:
+    def _all_edges_in_state(self, state: EdgeState) -> list[tuple[int, int]]:
         """
-        Enumerate all edge state matrices of dimension `n` with at most `max_edges` accepted edges.
+        Get a list of all edges in a specific state.
 
         Parameters:
-            n: The dimension of the edge state matrices.
-            max_edges: The maximum number of edges to allow in the edge state matrices.
+            state: The state to check for.
 
         Returns:
-            A list of edge state matrices.
+            A list of all edges in the specified state.
         """
-        valid_matrices = {0: [np.full(shape=(n, n), fill_value=-1)]}
+        rows, cols = np.asarray(self.m == state).nonzero()
+        return [(self.name(rows[i]), self.name(cols[i])) for i in range(len(rows))]
 
-        # Enumerate all valid matrices with k edges
-        for k in range(1, max_edges + 1):
-            valid_matrices[k] = []
+    @property
+    def fixed_list(self) -> list[tuple[str, str]]:
+        """
+        Get a list of all edges that are fixed.
 
-            # For each valid matrix with k-1 edges...
-            for m in valid_matrices[k - 1]:
-                # ...add a new edge in every possible way
-                for i in range(n):
-                    for j in range(i + 1, n):
-                        if m[i, j] < 0 and m[j, i] < 0:
-                            forward = m.copy()
-                            forward[i, j] = 1
-                            valid_matrices[k].append(forward)
-                            backward = m.copy()
-                            backward[j, i] = 1
-                            valid_matrices[k].append(backward)
+        Returns:
+            A list of all edges that are fixed.
+        """
+        return self._all_edges_in_state(EdgeState.FIXED)
 
-        # Flatten the collection of matrices into a single list
-        returned_matrices = []
-        for k in range(1, max_edges + 1):
-            returned_matrices.extend(valid_matrices[k])
+    @property
+    def ban_list(self) -> list[tuple[str, str]]:
+        """
+        Get a list of all edges that are banned.
 
-        return returned_matrices
-    
+        Returns:
+            A list of all edges that are banned.
+        """
+        return self._all_edges_in_state(EdgeState.BANNED)

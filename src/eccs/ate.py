@@ -15,7 +15,7 @@ class ATECalculator:
         data: pd.DataFrame,
         treatment_idx: int,
         outcome_idx: int,
-        graph: Optional[nx.DiGraph()] = None,
+        graph: Optional[nx.DiGraph] = None,
         calculate_p_value: bool = False,
         calculate_std_error: bool = False,
         get_estimand: bool = False,
@@ -52,7 +52,7 @@ class ATECalculator:
                         data=data[list(graph.nodes)],
                         treatment=data.columns[treatment_idx],
                         outcome=data.columns[outcome_idx],
-                        graph=nx.nx_pydot.to_pydot(graph).to_string(),
+                        graph=graph,
                     )
                     identified_estimand = model.identify_effect(
                         proceed_when_unidentifiable=True
