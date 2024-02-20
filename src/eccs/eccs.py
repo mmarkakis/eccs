@@ -272,11 +272,8 @@ class ECCS:
         if outcome is None:
             outcome = self._outcome
 
-        treatment_idx = self._data.columns.get_loc(treatment)
-        outcome_idx = self._data.columns.get_loc(outcome)
-
         return ATECalculator.get_ate_and_confidence(
-            self.data, treatment_idx=treatment_idx, outcome_idx=outcome_idx, graph=graph
+            self.data, treatment=treatment, outcome=outcome, graph=graph
         )["ATE"]
 
     def suggest(self, method: str) -> tuple[float, nx.DiGraph, pd.DataFrame]:
@@ -312,8 +309,9 @@ class ECCS:
             A tuple containing the suggested ATE, the suggested graph, and the suggested
                 modification(s) as a dataframe.
         """
-
+        base_ate = self.get_ate()
         best_ate = self.get_ate()
+        best_ate_diff = 0
         best_graph = self._graph.copy()
         best_modifications = pd.DataFrame(columns=["Source", "Destination", "Change"])
 
@@ -333,8 +331,10 @@ class ECCS:
                 self.add_edge(src, dst)
                 if self._graph_is_acceptable(self._graph):
                     new_ate = self.get_ate()
-                    if abs(new_ate - best_ate) > 0:
+                    new_ate_diff = abs(new_ate - base_ate)
+                    if new_ate_diff > best_ate_diff:
                         best_ate = new_ate
+                        best_ate_diff = new_ate_diff
                         best_graph = self.draw_graph()
 
                         best_modifications = pd.DataFrame(
@@ -349,8 +349,10 @@ class ECCS:
                 self.add_edge(src, dst)
                 if self._graph_is_acceptable(self._graph):
                     new_ate = self.get_ate()
-                    if abs(new_ate - best_ate) > 0:
+                    new_ate_diff = abs(new_ate - base_ate)
+                    if new_ate_diff > best_ate_diff:
                         best_ate = new_ate
+                        best_ate_diff = new_ate_diff
                         best_graph = self.draw_graph()
                         best_modifications = pd.DataFrame(
                             [[dst, src, "Flip"]],
@@ -362,8 +364,10 @@ class ECCS:
                 self.remove_edge(src, dst, remove_isolates=False)
                 if self._graph_is_acceptable(self._graph):
                     new_ate = self.get_ate()
-                    if abs(new_ate - best_ate) > 0:
+                    new_ate_diff = abs(new_ate - base_ate)
+                    if new_ate_diff > best_ate_diff:
                         best_ate = new_ate
+                        best_ate_diff = new_ate_diff
                         best_graph = self.draw_graph()
                         best_modifications = pd.DataFrame(
                             [[src, dst, "Remove"]],

@@ -13,8 +13,8 @@ class ATECalculator:
     @staticmethod
     def get_ate_and_confidence(
         data: pd.DataFrame,
-        treatment_idx: int,
-        outcome_idx: int,
+        treatment: str | int,
+        outcome: str | int,
         graph: Optional[nx.DiGraph] = None,
         calculate_p_value: bool = False,
         calculate_std_error: bool = False,
@@ -25,8 +25,8 @@ class ATECalculator:
 
         Parameters:
             data: The data to be used for causal analysis.
-            treatment_idx: The index of the treatment variable.
-            outcome_idx: The index of the outcome variable.
+            treatment_idx: The name or index of the treatment variable.
+            outcome_idx: The name or index of the outcome variable.
             graph: The graph to be used for causal analysis. If not specified, a two-node graph with just
                 `treatment` and `outcome` is used.
             calculate_p_value: Whether to calculate the P-value of the ATE.
@@ -38,11 +38,16 @@ class ATECalculator:
             `get_estimand` is True, the estimand used to calculate the ATE is also returned.
         """
 
+        treatment_name = (
+            data.columns[treatment] if isinstance(treatment, int) else treatment
+        )
+        outcome_name = data.columns[outcome] if isinstance(outcome, int) else outcome
+
         if graph is None:
             graph = nx.DiGraph()
-            graph.add_node(treatment_idx)
-            graph.add_node(outcome_idx)
-            graph.add_edge(treatment_idx, outcome_idx)
+            graph.add_node(treatment_name)
+            graph.add_node(outcome_name)
+            graph.add_edge(treatment_name, outcome_name)
 
         # Use dowhy to get the ATE, P-value and standard error.
         with open("/dev/null", "w+") as f:
@@ -50,8 +55,8 @@ class ATECalculator:
                 with contextlib.redirect_stdout(f), contextlib.redirect_stderr(f):
                     model = CausalModel(
                         data=data[list(graph.nodes)],
-                        treatment=data.columns[treatment_idx],
-                        outcome=data.columns[outcome_idx],
+                        treatment=treatment_name,
+                        outcome=outcome_name,
                         graph=graph,
                     )
                     identified_estimand = model.identify_effect(

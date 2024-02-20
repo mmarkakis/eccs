@@ -10,19 +10,19 @@ from streamlit import components
 
 DATASET_INFO = {
     "XYZ": {
-        "path": "../../datasets/xyz_extended/dataset_2024-02-14_21:07:53.csv",
+        "path": "../../datasets/xyz_extended/dataset_2024-02-20_20:42:28.csv",
     }
 }
 
 GRAPH_INFO = {
     "XYZ_simple": {
-        "path": "../../datasets/xyz_extended/dataset_2024-02-14_21:07:53_simple.dot",
+        "path": "../../datasets/xyz_extended/dataset_2024-02-20_20:42:28_simple.dot",
     },
     "XYZ_correct": {
-        "path": "../../datasets/xyz_extended/dataset_2024-02-14_21:07:53_correct.dot",
+        "path": "../../datasets/xyz_extended/dataset_2024-02-20_20:42:28_correct.dot",
     },
     "XYZ_incorrect": {
-        "path": "../../datasets/xyz_extended/dataset_2024-02-14_21:07:53_incorrect.dot",
+        "path": "../../datasets/xyz_extended/dataset_2024-02-20_20:42:28_incorrect.dot",
     },
 }
 
