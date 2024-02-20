@@ -4,10 +4,6 @@ import datetime
 import json
 import pandas as pd
 
-# z is baseline load
-# x is x_factor * z + random noise between -noise_radius and noise_radius
-# y is 2 * x_factor * z + random noise between -noise_radius and noise_radius
-
 
 DEFAULT_ARGS = {
     "length": 1000,
@@ -31,18 +27,16 @@ def xyz_extended_gen(args):
     # Compose the csv
     data_filename = filename + ".csv"
     with open(data_filename, "a+") as f:
-        # Draw z value
-        z = np.array([np.random.uniform(0, 10)] * args["length"])
-        z = z.reshape(-1, 1)
 
-        # Draw x values
-        x_base = np.random.uniform(0, 10)
-        x = x_base + z + np.random.normal(0, args["noise_radius"], (args["length"], 1))
-        x = np.clip(x, 0, 100)
+        z = np.random.uniform(0, 100, (args["length"], 1))
 
-        # Draw y values
-        y = 2 * x + 3 * z + np.random.normal(0, args["noise_radius"], (args["length"],1))
-        y = np.clip(y, 0, 100)
+        x = z + np.random.normal(0, args["noise_radius"], (args["length"], 1))
+
+        y = (
+            3 * x
+            + 2 * z
+            + np.random.normal(0, args["noise_radius"], (args["length"], 1))
+        )
 
         # Draw the remaining values
         rest = np.random.random((args["length"], args["num_total_variables"] - 3)) * 100
