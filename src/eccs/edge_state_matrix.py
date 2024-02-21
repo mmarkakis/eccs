@@ -149,6 +149,32 @@ class EdgeStateMatrix:
         dst_idx = self.idx(dst) if type(dst) == str else dst
         return self.get_edge_state(src, dst) == state
 
+    def is_edge_fixed(self, src: str | int, dst: str | int) -> bool:
+        """
+        Check if an edge is fixed.
+
+        Parameters:
+            src: The name or index of the source variable.
+            dst: The name or index of the destination variable.
+
+        Returns:
+            True if the edge is fixed, False otherwise.
+        """
+        return self.is_edge_in_state(src, dst, EdgeState.FIXED)
+
+    def is_edge_banned(self, src: str | int, dst: str | int) -> bool:
+        """
+        Check if an edge is banned.
+
+        Parameters:
+            src: The name or index of the source variable.
+            dst: The name or index of the destination variable.
+
+        Returns:
+            True if the edge is banned, False otherwise.
+        """
+        return self.is_edge_in_state(src, dst, EdgeState.BANNED)
+
     def mark_edge(self, src: str | int, dst: str | int, state: EdgeState) -> None:
         """
         Mark an edge as being in a specified state. Fixing an edge bans its inverse.
