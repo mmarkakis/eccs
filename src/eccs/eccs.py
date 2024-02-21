@@ -7,6 +7,7 @@ from .graph_renderer import GraphRenderer
 from .ate import ATECalculator
 from itertools import product
 from tqdm.auto import tqdm
+from stqdm import stqdm
 
 
 class EdgeChanges:
@@ -442,9 +443,11 @@ class ECCS:
         best_modifications = pd.DataFrame(columns=["Source", "Destination", "Change"])
 
         # iterate over all pairs of variables using tqdm
-        for i, j in tqdm(
+        for i, j in stqdm(
             product(range(self._num_vars), range(self._num_vars)),
             total=self._num_vars**2,
+            frontend=True,
+            backend=True,
         ):
 
             # Extract edge information
@@ -514,7 +517,12 @@ class ECCS:
             if v not in base_adj_set and v != self.treatment and v != self.outcome
         ]
 
-        for v in tqdm(vars_not_in_adj_set, total=len(vars_not_in_adj_set)):
+        for v in stqdm(
+            vars_not_in_adj_set,
+            total=len(vars_not_in_adj_set),
+            frontend=True,
+            backend=True,
+        ):
             (
                 is_current_best,
                 best_ate_diff,
