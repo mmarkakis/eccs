@@ -10,7 +10,7 @@ from tqdm.auto import tqdm
 from stqdm import stqdm
 
 
-class EdgeChanges:
+class EdgeChange:
     """
     Class to represent possible changes to a directed edge.
     """
@@ -143,25 +143,29 @@ class ECCS:
         - There is a directed path from the treatment to the outcome.
         - It includes no banned edges.
         - It includes all fixed edges.
+        The conditions are checked in order of expense, so that the most expensive checks are only performed if the
+        less expensive checks pass.
 
         Returns:
             True if the graph is acceptable, False otherwise.
         """
         is_acceptable = (
-            nx.is_directed_acyclic_graph(self.graph)  # It is a directed acyclic graph.
-            and self.treatment in self.graph.nodes  # It includes the treatment.
+            self.treatment in self.graph.nodes  # It includes the treatment.
             and self.outcome in self.graph.nodes  # It includes the outcome.
-            and nx.has_path(  # There is a directed path from the treatment to the outcome.
-                self.graph, self.treatment, self.outcome
-            )
             and all(  # It includes no banned edges.
-                self._edge_decisions_matrix.get_edge_state(src, dst) != EdgeState.BANNED
+                not self._edge_decisions_matrix.is_edge_banned(src, dst)
                 for src, dst in self.graph.edges
             )
             and all(  # It includes all fixed edges.
                 self.graph.has_edge(src, dst)
                 for src, dst in self._edge_decisions_matrix.fixed_list
             )
+            and nx.has_path(  # There is a directed path from the treatment to the outcome.
+                self.graph, self.treatment, self.outcome
+            )
+            and nx.is_directed_acyclic_graph(
+                self.graph
+            )  # It is a directed acyclic graph.
         )
 
         return is_acceptable
@@ -387,11 +391,11 @@ class ECCS:
 
         # Edit graph
         for src, dst, change_type in changes:
-            if change_type == EdgeChanges.ADD:
+            if change_type == EdgeChange.ADD:
                 self.add_edge(src, dst)
-            elif change_type == EdgeChanges.REMOVE:
+            elif change_type == EdgeChange.REMOVE:
                 self.remove_edge(src, dst, remove_isolates=True)
-            elif change_type == EdgeChanges.FLIP:
+            elif change_type == EdgeChange.FLIP:
                 self.remove_edge(src, dst, remove_isolates=False)
                 self.add_edge(dst, src)
 
@@ -416,11 +420,11 @@ class ECCS:
 
         # Undo graph edits
         for src, dst, change_type in changes:
-            if change_type == EdgeChanges.ADD:
+            if change_type == EdgeChange.ADD:
                 self.remove_edge(src, dst)
-            elif change_type == EdgeChanges.REMOVE:
+            elif change_type == EdgeChange.REMOVE:
                 self.add_edge(src, dst)
-            elif change_type == EdgeChanges.FLIP:
+            elif change_type == EdgeChange.FLIP:
                 self.remove_edge(dst, src, remove_isolates=False)
                 self.add_edge(src, dst)
 
@@ -461,15 +465,15 @@ class ECCS:
             is_current_best = False
             if f_state == EdgeState.ABSENT and r_state == EdgeState.ABSENT:
                 vals = self._edit_graph_and_evaluate_ate_diff(
-                    [(src, dst, EdgeChanges.ADD)], base_ate, best_ate_diff
+                    [(src, dst, EdgeChange.ADD)], base_ate, best_ate_diff
                 )
             elif f_state == EdgeState.PRESENT and r_state == EdgeState.ABSENT:
                 vals = self._edit_graph_and_evaluate_ate_diff(
-                    [(src, dst, EdgeChanges.FLIP)], base_ate, best_ate_diff
+                    [(src, dst, EdgeChange.FLIP)], base_ate, best_ate_diff
                 )
             elif f_state == EdgeState.PRESENT:
                 vals = self._edit_graph_and_evaluate_ate_diff(
-                    [(src, dst, EdgeChanges.REMOVE)], base_ate, best_ate_diff
+                    [(src, dst, EdgeChange.REMOVE)], base_ate, best_ate_diff
                 )
 
             # Update best values if necessary
@@ -508,8 +512,6 @@ class ECCS:
         base_adj_set = nx.algorithms.minimal_d_separator(
             self._graph, self.treatment, self.outcome
         )
-
-        # TODO: this should not touch banned/fixed edges
 
         vars_not_in_adj_set = [
             v
