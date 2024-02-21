@@ -74,11 +74,11 @@ if "is_file_chosen" in st.session_state and st.session_state["is_file_chosen"]:
         eccs_ui.prompt_calculate_current_ate()
         if "ate" in st.session_state:
             eccs_ui.prompt_press_eccs()
-        if "future_ate" in st.session_state:
+        if "ate" in st.session_state and "future_ate" in st.session_state:
             eccs_ui.show_eccs_findings()
     with col_3:
-        if "future_graph" in st.session_state:
+        if "ate" in st.session_state and "future_graph" in st.session_state:
             eccs_ui.show_future_graph()
-        if "future_modifications" in st.session_state:
+        if "ate" in st.session_state and "future_modifications" in st.session_state:
             with st.expander("Graph modifications", expanded=True):
                 st.write(st.session_state["future_modifications"])

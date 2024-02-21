@@ -84,7 +84,7 @@ class ECCSUI:
 
     def prompt_select_treatment(self):
         def on_click_select_treatment():
-            pass
+            self.clear_next(["ate"])
 
         with st.form("select_treatment_form"):
             st.subheader("Select the treatment variable:")
@@ -106,7 +106,7 @@ class ECCSUI:
 
     def prompt_select_outcome(self):
         def on_click_select_outcome():
-            pass
+            self.clear_next(["ate"])
 
         with st.form("select_outcome_form"):
             st.subheader("Select the outcome variable:")
@@ -136,7 +136,7 @@ class ECCSUI:
                 src=st.session_state["edit_source_node"],
                 dst=st.session_state["edit_destination_node"],
             )
-            self.clear_next(["edit_source_node", "edit_destination_node"])
+            self.clear_next(["ate", "edit_source_node", "edit_destination_node"])
             st.session_state["graph"] = self.eccs.draw_graph()
 
         def on_click_remove():
@@ -144,7 +144,7 @@ class ECCSUI:
                 src=st.session_state["edit_source_node"],
                 dst=st.session_state["edit_destination_node"],
             )
-            self.clear_next(["edit_source_node", "edit_destination_node"])
+            self.clear_next(["ate", "edit_source_node", "edit_destination_node"])
             st.session_state["graph"] = self.eccs.draw_graph()
 
         with st.form("edit_graph_form"):
@@ -184,7 +184,7 @@ class ECCSUI:
                 src=st.session_state["fix_source_node"],
                 dst=st.session_state["fix_destination_node"],
             )
-            self.clear_next(["fix_source_node", "fix_destination_node"])
+            self.clear_next(["ate", "fix_source_node", "fix_destination_node"])
             st.session_state["graph"] = self.eccs.draw_graph()
 
         def on_click_unfix():
@@ -192,7 +192,7 @@ class ECCSUI:
                 src=st.session_state["fix_source_node"],
                 dst=st.session_state["fix_destination_node"],
             )
-            self.clear_next(["fix_source_node", "fix_destination_node"])
+            self.clear_next(["ate", "fix_source_node", "fix_destination_node"])
             st.session_state["graph"] = self.eccs.draw_graph()
 
         with st.form("fix_edge_form"):
@@ -230,7 +230,7 @@ class ECCSUI:
                 src=st.session_state["ban_source_node"],
                 dst=st.session_state["ban_destination_node"],
             )
-            self.clear_next(["ban_source_node", "ban_destination_node"])
+            self.clear_next(["ate", "ban_source_node", "ban_destination_node"])
             st.session_state["graph"] = self.eccs.draw_graph()
 
         def on_click_unban():
@@ -238,7 +238,7 @@ class ECCSUI:
                 src=st.session_state["ban_source_node"],
                 dst=st.session_state["ban_destination_node"],
             )
-            self.clear_next(["ban_source_node", "ban_destination_node"])
+            self.clear_next(["ate", "ban_source_node", "ban_destination_node"])
             st.session_state["graph"] = self.eccs.draw_graph()
 
         with st.form("ban_edge_form"):
@@ -281,6 +281,7 @@ class ECCSUI:
         def on_click_calculate_current_ate():
             with st.spinner("Calculating ATE ..."):
                 st.session_state["ate"] = self.eccs.get_ate()
+                self.clear_next(["future_ate", "future_graph", "future_modifications"])
 
         with st.form("calculate_current_ate_form"):
             st.subheader("Calculate the current ATE:")
