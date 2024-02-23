@@ -5,7 +5,7 @@ from networkx.algorithms.d_separation import minimal_d_separator
 from .edge_state_matrix import EdgeState, EdgeStateMatrix
 from .graph_renderer import GraphRenderer
 from .ate import ATECalculator
-from itertools import product
+from itertools import combinations
 from tqdm.auto import tqdm
 from stqdm import stqdm
 
@@ -368,7 +368,7 @@ class ECCS:
         elif method == "Best single adjustment set addition":
             return self._suggest_best_single_adjustment_set_addition()
 
-    def _edit_graph_and_evaluate_ate_diff(
+    def _find_ate_diff_for_changes(
         self, changes: list[tuple[str, str, str]], base_ate: float, best_ate_diff: float
     ) -> Tuple[bool, float, Optional[float], Optional[str], Optional[pd.DataFrame]]:
         """
@@ -446,48 +446,72 @@ class ECCS:
         best_graph = self.draw_graph()
         best_modifications = pd.DataFrame(columns=["Source", "Destination", "Change"])
 
-        # iterate over all pairs of variables using tqdm
+        # Check and update best
+        def update_best(
+            vals: Tuple[
+                bool, float, Optional[float], Optional[str], Optional[pd.DataFrame]
+            ]
+        ) -> None:
+            if vals[0]:
+                best_ate_diff = vals[1]
+                best_ate = vals[2]
+                best_graph = vals[3]
+                best_modifications = vals[4]
+
+        # Iterate over all unordered pairs of variables using stqdm
+        pairs = list(combinations(range(self._num_vars), 2))
         for i, j in stqdm(
-            product(range(self._num_vars), range(self._num_vars)),
-            total=self._num_vars**2,
+            pairs,
             frontend=True,
             backend=True,
         ):
 
-            # Extract edge information
-            src = self._data.columns[i]
-            dst = self._data.columns[j]
-            f_state = self._edge_decisions_matrix.get_edge_state(src, dst)
-            r_state = self._edge_decisions_matrix.get_edge_state(dst, src)
+            # Extract edge endpoints and if none of the two are in the graph, skip
+            e1 = self._data.columns[i]
+            e2 = self._data.columns[j]
+            if not self._graph.has_node(e1) and not self._graph.has_node(e2):
+                continue
+            
+            # Extract edge states 
+            f_state = self._edge_decisions_matrix.get_edge_state(e1, e2)
+            r_state = self._edge_decisions_matrix.get_edge_state(e2, e1)
 
             # Apply the change and evaluate the ATE difference
-            vals = (False, best_ate_diff, None, None, None)
-            is_current_best = False
             if f_state == EdgeState.ABSENT and r_state == EdgeState.ABSENT:
-                vals = self._edit_graph_and_evaluate_ate_diff(
-                    [(src, dst, EdgeChange.ADD)], base_ate, best_ate_diff
+                # Try adding in the "forward" direction
+                vals = self._find_ate_diff_for_changes(
+                    [(e1, e2, EdgeChange.ADD)], base_ate, best_ate_diff
                 )
-            elif f_state == EdgeState.PRESENT and r_state == EdgeState.ABSENT:
-                vals = self._edit_graph_and_evaluate_ate_diff(
-                    [(src, dst, EdgeChange.FLIP)], base_ate, best_ate_diff
+                update_best(vals)
+                # Try adding in the "reverse" direction
+                vals = self._find_ate_diff_for_changes(
+                    [(e2, e1, EdgeChange.ADD)], base_ate, best_ate_diff
                 )
+                update_best(vals)
             elif f_state == EdgeState.PRESENT:
-                vals = self._edit_graph_and_evaluate_ate_diff(
-                    [(src, dst, EdgeChange.REMOVE)], base_ate, best_ate_diff
+                # Try removing the edge
+                vals = self._find_ate_diff_for_changes(
+                    [(e1, e2, EdgeChange.REMOVE)], base_ate, best_ate_diff
                 )
-
-            # Update best values if necessary
-            (
-                is_current_best,
-                best_ate_diff,
-                maybe_ate,
-                maybe_graph,
-                maybe_modifications,
-            ) = vals
-            if is_current_best:
-                best_ate = maybe_ate
-                best_graph = maybe_graph
-                best_modifications = maybe_modifications
+                update_best(vals)
+                if r_state == EdgeState.ABSENT:  # As opposed to banned
+                    # Try flipping the edge
+                    vals = self._find_ate_diff_for_changes(
+                        [(e1, e2, EdgeChange.FLIP)], base_ate, best_ate_diff
+                    )
+                    update_best(vals)
+            elif r_state == EdgeState.PRESENT:
+                # Try removing the edge
+                vals = self._find_ate_diff_for_changes(
+                    [(e2, e1, EdgeChange.REMOVE)], base_ate, best_ate_diff
+                )
+                update_best(vals)
+                if f_state == EdgeState.ABSENT:  # As opposed to banned
+                    # Try flipping the edge
+                    vals = self._find_ate_diff_for_changes(
+                        [(e2, e1, EdgeChange.FLIP)], base_ate, best_ate_diff
+                    )
+                    update_best(vals)
 
         return best_ate, best_graph, best_modifications
 
@@ -531,7 +555,7 @@ class ECCS:
                 maybe_ate,
                 maybe_graph,
                 maybe_modifications,
-            ) = self._edit_graph_and_evaluate_ate_diff(
+            ) = self._find_ate_diff_for_changes(
                 [(v, self.treatment, "Add"), (v, self.outcome, "Add")],
                 base_ate,
                 best_ate_diff,
