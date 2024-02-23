@@ -135,9 +135,9 @@ class ECCS:
         """
         return self._graph
 
-    def _graph_is_acceptable(self) -> bool:
+    def _is_acceptable(self, graph: Optional[nx.DiGraph]) -> bool:
         """
-        Check if self.graph is acceptable. A graph is acceptable if it satisfies the following conditions:
+        Check if graph is acceptable. A graph is acceptable if it satisfies the following conditions:
         - It is a directed acyclic graph.
         - It includes the treatment and outcome variables.
         - There is a directed path from the treatment to the outcome.
@@ -146,26 +146,30 @@ class ECCS:
         The conditions are checked in order of expense, so that the most expensive checks are only performed if the
         less expensive checks pass.
 
+        Parameters:
+            graph: The graph to check. If None, self.graph is checked.
+
         Returns:
             True if the graph is acceptable, False otherwise.
         """
+        if graph is None:
+            graph = self.graph
+
         is_acceptable = (
-            self.treatment in self.graph.nodes  # It includes the treatment.
-            and self.outcome in self.graph.nodes  # It includes the outcome.
+            self.treatment in graph.nodes  # It includes the treatment.
+            and self.outcome in graph.nodes  # It includes the outcome.
             and all(  # It includes no banned edges.
                 not self._edge_decisions_matrix.is_edge_banned(src, dst)
-                for src, dst in self.graph.edges
+                for src, dst in graph.edges
             )
             and all(  # It includes all fixed edges.
-                self.graph.has_edge(src, dst)
+                graph.has_edge(src, dst)
                 for src, dst in self._edge_decisions_matrix.fixed_list
             )
             and nx.has_path(  # There is a directed path from the treatment to the outcome.
-                self.graph, self.treatment, self.outcome
+                graph, self.treatment, self.outcome
             )
-            and nx.is_directed_acyclic_graph(
-                self.graph
-            )  # It is a directed acyclic graph.
+            and nx.is_directed_acyclic_graph(graph)  # It is a directed acyclic graph.
         )
 
         return is_acceptable
@@ -375,67 +379,70 @@ class ECCS:
         elif method == "Best single adjustment set addition":
             return self._suggest_best_single_adjustment_set_addition()
 
-    def _find_ate_diff_for_changes(
-        self, changes: list[tuple[str, str, str]], base_ate: float, best_ate_diff: float
-    ) -> Tuple[bool, float, Optional[float], Optional[str], Optional[pd.DataFrame]]:
+    def _edit_and_get_ate(self, edits: list[tuple[str, str, str]]) -> Optional[float]:
         """
-        Edit the graph according to the changes and evaluate the ATE difference.
+        Edit a copy of the current self.graph according to `edits` and evaluate the ATE.
+        Does not modify self.graph.
 
         Parameters:
-            changes: A list of tuples containing the changes to be made to the graph. Each tuple
+            edits: A list of tuples containing the edits to be made to the graph. Each tuple
                 contains the source and destination of the edge and the change type.
-            base_ate: The base ATE.
-            best_ate_diff: The best ATE difference so far.
 
         Returns:
-            A tuple containing:
-                - A boolean indicating if the current ATE is the best so far.
-                - The best ATE difference so far.
-                - The best ATE so far, or None if the first element is False.
-                - The best graph so far, or None if the first element is False.
-                - The best modifications so far as a dataframe, or None if the first element is False.
+            The ATE, or None if the graph is not acceptable.
         """
 
+        graph = self._graph.copy()
+
         # Edit graph
-        for src, dst, change_type in changes:
+        for src, dst, change_type in edits:
             if change_type == EdgeChange.ADD:
-                self.add_edge(src, dst, is_suggested=True)
+                graph.add_edge(src, dst)
             elif change_type == EdgeChange.REMOVE:
-                self.remove_edge(src, dst, remove_isolates=True)
+                graph.remove_edge(src, dst)
             elif change_type == EdgeChange.FLIP:
-                self.remove_edge(src, dst, remove_isolates=False)
-                self.add_edge(dst, src, is_suggested=True)
+                graph.remove_edge(src, dst)
+                graph.add_edge(dst, src)
 
-        # Check if the ATE is maximally changed
-        is_current_best = False
-        best_ate = None
-        best_graph = None
-        best_modifications = None
-        if self._graph_is_acceptable():
-            new_ate = self.get_ate()
-            new_ate_diff = abs(new_ate - base_ate)
-            if new_ate_diff > best_ate_diff:
-                is_current_best = True
-                best_ate_diff = new_ate_diff
+        # Compute the ATE if the graph is acceptable
+        if not self._is_acceptable(graph):
+            return None
 
-                best_ate = new_ate
-                best_graph = self.draw_graph()
-                best_modifications = pd.DataFrame(
-                    changes,
-                    columns=["Source", "Destination", "Change"],
-                )
+        return self.get_ate(graph, self.treatment, self.outcome)
 
-        # Undo graph edits
-        for src, dst, change_type in changes:
+    def _edit_and_draw(self, edits: list[tuple[str, str, str]]) -> Optional[str]:
+        """
+        Edit a copy of the current self.graph according to `edits` and draw the graph.
+        Parameters:
+            edits: A list of tuples containing the edits to be made to the graph. Each tuple
+                contains the source and destination of the edge and the change type.
+
+        Returns:
+            A base64-encoded string representation of the graph, or None if the graph is not acceptable.
+        """
+
+        graph = self._graph.copy()
+        edge_decisions_matrix = self._edge_decisions_matrix.copy()
+
+        # Edit graph
+        for src, dst, change_type in edits:
             if change_type == EdgeChange.ADD:
-                self.remove_edge(src, dst)
+                graph.add_edge(src, dst)
+                edge_decisions_matrix.mark_edge(src, dst, EdgeState.SUGGESTED)
             elif change_type == EdgeChange.REMOVE:
-                self.add_edge(src, dst)
+                graph.remove_edge(src, dst)
+                edge_decisions_matrix.mark_edge(src, dst, EdgeState.ABSENT)
             elif change_type == EdgeChange.FLIP:
-                self.remove_edge(dst, src, remove_isolates=False)
-                self.add_edge(src, dst)
+                graph.remove_edge(src, dst)
+                edge_decisions_matrix.mark_edge(src, dst, EdgeState.ABSENT)
+                graph.add_edge(dst, src)
+                edge_decisions_matrix.mark_edge(dst, src, EdgeState.SUGGESTED)
 
-        return is_current_best, best_ate_diff, best_ate, best_graph, best_modifications
+        # Draw the graph if the graph is acceptable
+        if not self._is_acceptable(graph):
+            return None
+
+        return GraphRenderer.draw_graph(graph, edge_decisions_matrix)
 
     def _suggest_best_single_edge_change(
         self,
@@ -448,27 +455,15 @@ class ECCS:
                 modification(s) as a dataframe.
         """
         base_ate = self.get_ate()
-        best = {
-            "ate_diff": 0,
-            "ate": base_ate,
-            "graph": self.draw_graph(),
-            "modifications": pd.DataFrame(columns=["Source", "Destination", "Change"]),
-        }
 
-        # Check and update best
-        def update_best(
-            vals: Tuple[
-                bool, float, Optional[float], Optional[str], Optional[pd.DataFrame]
-            ]
-        ) -> None:
-            if vals[0]:
-                best["ate_diff"] = vals[1]
-                best["ate"] = vals[2]
-                best["graph"] = vals[3]
-                best["modifications"] = vals[4]
-
-        # Iterate over all unordered pairs of variables using stqdm
+        # Iterate over all unordered pairs of variables using stqdm and compute ates
         pairs = list(combinations(range(self._num_vars), 2))
+        ates = []
+
+        def append_to_ates(ate, modifications):
+            if ate is not None:
+                ates.append((ate, modifications))
+
         for i, j in stqdm(
             pairs,
             frontend=True,
@@ -485,44 +480,48 @@ class ECCS:
             f_state = self._edge_decisions_matrix.get_edge_state(e1, e2)
             r_state = self._edge_decisions_matrix.get_edge_state(e2, e1)
 
-            # Apply the change and evaluate the ATE difference
+            # Apply the change and evaluate the ATE
             if f_state == EdgeState.ABSENT and r_state == EdgeState.ABSENT:
                 # Try adding in the "forward" direction
-                vals = self._find_ate_diff_for_changes(
-                    [(e1, e2, EdgeChange.ADD)], base_ate, best["ate_diff"]
-                )
-                update_best(vals)
+                ate = self._edit_and_get_ate([(e1, e2, EdgeChange.ADD)])
+                append_to_ates(ate, [(e1, e2, EdgeChange.ADD)])
                 # Try adding in the "reverse" direction
-                vals = self._find_ate_diff_for_changes(
-                    [(e2, e1, EdgeChange.ADD)], base_ate, best["ate_diff"]
-                )
-                update_best(vals)
+                ate = self._edit_and_get_ate([(e2, e1, EdgeChange.ADD)])
+                append_to_ates(ate, [(e2, e1, EdgeChange.ADD)])
             elif f_state == EdgeState.PRESENT:
                 # Try removing the edge
-                vals = self._find_ate_diff_for_changes(
-                    [(e1, e2, EdgeChange.REMOVE)], base_ate, best["ate_diff"]
-                )
-                update_best(vals)
+                ate = self._edit_and_get_ate([(e1, e2, EdgeChange.REMOVE)])
+                append_to_ates(ate, [(e1, e2, EdgeChange.REMOVE)])
                 if r_state == EdgeState.ABSENT:  # As opposed to banned
                     # Try flipping the edge
-                    vals = self._find_ate_diff_for_changes(
-                        [(e1, e2, EdgeChange.FLIP)], base_ate, best["ate_diff"]
-                    )
-                    update_best(vals)
+                    ate = self._edit_and_get_ate([(e1, e2, EdgeChange.FLIP)])
+                    append_to_ates(ate, [(e1, e2, EdgeChange.FLIP)])
             elif r_state == EdgeState.PRESENT:
                 # Try removing the edge
-                vals = self._find_ate_diff_for_changes(
-                    [(e2, e1, EdgeChange.REMOVE)], base_ate, best["ate_diff"]
-                )
-                update_best(vals)
+                ate = self._edit_and_get_ate([(e2, e1, EdgeChange.REMOVE)])
+                append_to_ates(ate, [(e2, e1, EdgeChange.REMOVE)])
                 if f_state == EdgeState.ABSENT:  # As opposed to banned
                     # Try flipping the edge
-                    vals = self._find_ate_diff_for_changes(
-                        [(e2, e1, EdgeChange.FLIP)], base_ate, best["ate_diff"]
-                    )
-                    update_best(vals)
+                    ate = self._edit_and_get_ate([(e2, e1, EdgeChange.FLIP)])
+                    append_to_ates(ate, [(e2, e1, EdgeChange.FLIP)])
 
-        return best["ate"], best["graph"], best["modifications"]
+        # Find ATE-difference maximizing tuple
+        max_tuple = max(ates, key=lambda x: x[0])
+        min_tuple = min(ates, key=lambda x: x[0])
+        best_tuple = (
+            max_tuple
+            if abs(max_tuple[0] - base_ate) > abs(min_tuple[0] - base_ate)
+            else min_tuple
+        )
+
+        # Get the corresponding graph and modifications
+        best_graph = self._edit_and_draw(best_tuple[1])
+
+        return (
+            best_tuple[0],
+            best_graph,
+            pd.DataFrame(best_tuple[1], columns=["Source", "Destination", "Change"]),
+        )
 
     def _suggest_best_single_adjustment_set_addition(
         self,

@@ -1,5 +1,6 @@
 import numpy as np
 import networkx as nx
+from typing import Self
 
 
 class EdgeState:
@@ -224,3 +225,15 @@ class EdgeStateMatrix:
             A list of all edges that are banned.
         """
         return self._all_edges_in_state(EdgeState.BANNED)
+
+    # Implement a copy method
+    def copy(self) -> Self:
+        """
+        Create a copy of the edge state matrix.
+
+        Returns:
+            A copy of the edge state matrix.
+        """
+        new_matrix = EdgeStateMatrix(self._variables)
+        new_matrix.clear_and_set_from_matrix(self._m)
+        return new_matrix
