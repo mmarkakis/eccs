@@ -8,6 +8,7 @@ from .ate import ATECalculator
 from itertools import combinations
 from tqdm.auto import tqdm
 from stqdm import stqdm
+import multiprocessing
 
 
 class EdgeChange:
@@ -27,7 +28,7 @@ class ECCS:
 
     EDGE_SUGGESTION_METHODS = [
         "Best single edge change",
-        "Best single adjustment set addition",
+        "Best single adjustment set change",
     ]
 
     def __init__(self, data_path: str, graph_path: Optional[str]):
@@ -405,10 +406,10 @@ class ECCS:
                 graph.add_edge(dst, src)
 
         # Compute the ATE if the graph is acceptable
-        if not self._is_acceptable(graph):
-            return None
+        if self._is_acceptable(graph):
+            return self.get_ate(graph, self.treatment, self.outcome)
 
-        return self.get_ate(graph, self.treatment, self.outcome)
+        return None
 
     def _edit_and_draw(self, edits: list[tuple[str, str, str]]) -> Optional[str]:
         """
@@ -446,24 +447,36 @@ class ECCS:
 
     def _suggest_best_single_edge_change(
         self,
-    ) -> Tuple[float, str, pd.DataFrame]:
+    ) -> Tuple[pd.DataFrame, float]:
         """
         Suggest the best single edge change that maximally changes the ATE.
 
         Returns:
-            A tuple containing the suggested ATE, the suggested graph, and the suggested
-                modification(s) as a dataframe.
+            A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
         """
         base_ate = self.get_ate()
+        furthest_ate = self.get_ate()
+        best_ate_diff = 0
+        best_edits = pd.DataFrame(columns=["Source", "Destination", "Change"])
+
+        def maybe_update_best(ate, edits):
+            if ate is None:
+                return
+            ate_diff = abs(ate - base_ate)
+            if ate_diff > best_ate_diff:
+                nonlocal best_ate_diff
+                nonlocal furthest_ate
+                nonlocal best_edits
+
+                best_ate_diff = ate_diff
+                furthest_ate = ate
+                best_edits = pd.DataFrame(
+                    edits, columns=["Source", "Destination", "Change"]
+                )
+
+        pairs = list(combinations(range(self._num_vars), 2))
 
         # Iterate over all unordered pairs of variables using stqdm and compute ates
-        pairs = list(combinations(range(self._num_vars), 2))
-        ates = []
-
-        def append_to_ates(ate, modifications):
-            if ate is not None:
-                ates.append((ate, modifications))
-
         for i, j in stqdm(
             pairs,
             frontend=True,
@@ -473,105 +486,108 @@ class ECCS:
             # Extract edge endpoints and if none of the two are in the graph, skip
             e1 = self._data.columns[i]
             e2 = self._data.columns[j]
-            if not self._graph.has_node(e1) and not self._graph.has_node(e2):
-                continue
 
             # Extract edge states
             f_state = self._edge_decisions_matrix.get_edge_state(e1, e2)
             r_state = self._edge_decisions_matrix.get_edge_state(e2, e1)
 
             # Apply the change and evaluate the ATE
-            if f_state == EdgeState.ABSENT and r_state == EdgeState.ABSENT:
+            if f_state == EdgeState.ABSENT and (
+                r_state == EdgeState.ABSENT or r_state == EdgeState.BANNED
+            ):
                 # Try adding in the "forward" direction
                 ate = self._edit_and_get_ate([(e1, e2, EdgeChange.ADD)])
-                append_to_ates(ate, [(e1, e2, EdgeChange.ADD)])
+                maybe_update_best(ate, [(e1, e2, EdgeChange.ADD)])
+            if r_state == EdgeState.ABSENT and (
+                f_state == EdgeState.ABSENT or f_state == EdgeState.BANNED
+            ):
                 # Try adding in the "reverse" direction
                 ate = self._edit_and_get_ate([(e2, e1, EdgeChange.ADD)])
-                append_to_ates(ate, [(e2, e1, EdgeChange.ADD)])
-            elif f_state == EdgeState.PRESENT:
+                maybe_update_best(ate, [(e2, e1, EdgeChange.ADD)])
+            if f_state == EdgeState.PRESENT:
                 # Try removing the edge
                 ate = self._edit_and_get_ate([(e1, e2, EdgeChange.REMOVE)])
-                append_to_ates(ate, [(e1, e2, EdgeChange.REMOVE)])
+                maybe_update_best(ate, [(e1, e2, EdgeChange.REMOVE)])
                 if r_state == EdgeState.ABSENT:  # As opposed to banned
                     # Try flipping the edge
                     ate = self._edit_and_get_ate([(e1, e2, EdgeChange.FLIP)])
-                    append_to_ates(ate, [(e1, e2, EdgeChange.FLIP)])
-            elif r_state == EdgeState.PRESENT:
+                    maybe_update_best(ate, [(e1, e2, EdgeChange.FLIP)])
+            if r_state == EdgeState.PRESENT:
                 # Try removing the edge
                 ate = self._edit_and_get_ate([(e2, e1, EdgeChange.REMOVE)])
-                append_to_ates(ate, [(e2, e1, EdgeChange.REMOVE)])
+                maybe_update_best(ate, [(e2, e1, EdgeChange.REMOVE)])
                 if f_state == EdgeState.ABSENT:  # As opposed to banned
                     # Try flipping the edge
                     ate = self._edit_and_get_ate([(e2, e1, EdgeChange.FLIP)])
-                    append_to_ates(ate, [(e2, e1, EdgeChange.FLIP)])
+                    maybe_update_best(ate, [(e2, e1, EdgeChange.FLIP)])
 
-        # Find ATE-difference maximizing tuple
-        max_tuple = max(ates, key=lambda x: x[0])
-        min_tuple = min(ates, key=lambda x: x[0])
-        best_tuple = (
-            max_tuple
-            if abs(max_tuple[0] - base_ate) > abs(min_tuple[0] - base_ate)
-            else min_tuple
-        )
+        return (best_edits, furthest_ate)
 
-        # Get the corresponding graph and modifications
-        best_graph = self._edit_and_draw(best_tuple[1])
-
-        return (
-            best_tuple[0],
-            best_graph,
-            pd.DataFrame(best_tuple[1], columns=["Source", "Destination", "Change"]),
-        )
-
-    def _suggest_best_single_adjustment_set_addition(
+    def _suggest_best_single_adjustment_set_change(
         self,
-    ) -> Tuple[float, nx.DiGraph, pd.DataFrame]:
+    ) -> Tuple[pd.DataFrame, float]:
         """
-        Suggest the best single adjustment set addition that maximally changes the ATE.
+        Suggest the best single adjustment set changes that maximally changes the ATE.
+
+        Changes are translated to edge changes in a rudimentary manner.
 
         Returns:
-            A tuple containing the suggested ATE, the suggested graph, and the suggested
-                modification(s) as a dataframe.
+            A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
         """
         base_ate = self.get_ate()
-        best_ate = self.get_ate()
+        furthest_ate = self.get_ate()
         best_ate_diff = 0
-        best_graph = self._graph.copy()
-        best_modifications = pd.DataFrame(columns=["Source", "Destination", "Change"])
+        best_edits = pd.DataFrame(columns=["Source", "Destination", "Change"])
 
-        # Find a current minimal adjustment set
-        # TODO: Can we guarantee that this set will be the same across calls?
+        def maybe_update_best(ate, edits):
+            if ate is None:
+                return
+            ate_diff = abs(ate - base_ate)
+            if ate_diff > best_ate_diff:
+                nonlocal best_ate_diff
+                nonlocal furthest_ate
+                nonlocal best_edits
+
+                best_ate_diff = ate_diff
+                furthest_ate = ate
+                best_edits = pd.DataFrame(
+                    edits, columns=["Source", "Destination", "Change"]
+                )
+
         base_adj_set = nx.algorithms.minimal_d_separator(
             self._graph, self.treatment, self.outcome
         )
-
         vars_not_in_adj_set = [
             v
             for v in self.vars
             if v not in base_adj_set and v != self.treatment and v != self.outcome
         ]
 
+        # Try adding each of the addable
         for v in stqdm(
             vars_not_in_adj_set,
             total=len(vars_not_in_adj_set),
             frontend=True,
             backend=True,
         ):
-            (
-                is_current_best,
-                best_ate_diff,
-                maybe_ate,
-                maybe_graph,
-                maybe_modifications,
-            ) = self._find_ate_diff_for_changes(
-                [(v, self.treatment, "Add"), (v, self.outcome, "Add")],
-                base_ate,
-                best_ate_diff,
-            )
+            edits = [
+                (v, self.treatment, EdgeChange.ADD),
+                (v, self.outcome, EdgeChange.ADD),
+            ]
+            ate = self._edit_and_get_ate(edits, base_ate, best_ate_diff)
+            maybe_update_best(ate, edits)
 
-            if is_current_best:
-                best_ate = maybe_ate
-                best_graph = maybe_graph
-                best_modifications = maybe_modifications
+        # Try removing each of the removable
+        for v in stqdm(
+            base_adj_set,
+            total=len(base_adj_set),
+            frontend=True,
+            backend=True,
+        ):
+            edits = [
+                (self.treatment, v, EdgeChange.ADD),
+            ]
+            ate = self._edit_and_get_ate(edits, base_ate, best_ate_diff)
+            maybe_update_best(ate, edits)
 
-        return best_ate, best_graph, best_modifications
+        return (best_edits, furthest_ate)
