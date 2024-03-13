@@ -13,9 +13,6 @@ class ECCSUser:
     accordingly.
     """
 
-    # The maximum number of invocations of the ECCS system
-    MAX_INVOCATIONS = 100
-
     def __init__(
         self,
         data_path: str,
@@ -47,6 +44,7 @@ class ECCSUser:
 
         self._invocations = 0
         self._ate_trajectory = [self.current_ate]
+        self._edit_disance_trajectory = [self.current_graph_edit_distance]
 
     @property
     def true_ate(self) -> float:
@@ -98,14 +96,34 @@ class ECCSUser:
         )
 
     @property
-    def can_invoke_again(self) -> bool:
+    def invocations(self) -> int:
         """
-        Returns whether the user has reached the maximum number of ECCS invocations.
+        Returns the number of invocations of the ECCS system so far.
 
         Returns:
-            Whether the user can invoke the ECCS system again.
+            The number of invocations of the ECCS system.
         """
-        return self._invocations < self.MAX_INVOCATIONS
+        return self._invocations
+
+    @property
+    def ate_trajectory(self) -> list[float]:
+        """
+        Returns the trajectory of the ATE over the invocations.
+
+        Returns:
+            The trajectory of the ATE over the invocations.
+        """
+        return self._ate_trajectory
+
+    @property
+    def edit_distance_trajectory(self) -> list[int]:
+        """
+        Returns the trajectory of the graph edit distance over the invocations.
+
+        Returns:
+            The trajectory of the graph edit distance over the invocations.
+        """
+        return self._edit_disance_trajectory
 
     def invoke_eccs(self, method: str = None) -> None:
         """
@@ -115,21 +133,44 @@ class ECCSUser:
         if (method is None) or (method not in self._eccs.EDGE_SUGGESTION_METHODS):
             method = self._eccs.EDGE_SUGGESTION_METHODS[0]
 
-        if not self.can_invoke_again:
-            return
-
-        # Get suggested modifications
+        # Get suggested modifications and seelctively apply them
         edits, ate = self._eccs.suggest(method)
         for tup in edits.itertuples():
-            if tup.Change == EdgeChange.ADD:
-
-
-            elif tup.Change == EdgeChange.REMOVE:
-
-
-            elif tup.Change == EdgeChange.FLIP:
-                
+            edge = (tup.Source, tup.Target)
+            if tup.Change == EdgeChange.ADD and edge not in self._eccs.graph.edges():
+                if edge in self._true_graph.edges():
+                    self._eccs.add_edge(tup.Source, tup.Target)
+                    self._eccs.fix_edge(tup.Source, tup.Target)
+                else:
+                    self._eccs.ban_edge(tup.Source, tup.Target)
+            elif tup.Change == EdgeChange.REMOVE and edge in self._eccs.graph.edges():
+                if edge not in self._true_graph.edges():
+                    self._eccs.remove_edge(tup.Source, tup.Target)
+                    self._eccs.ban_edge(tup.Source, tup.Target)
+                else:
+                    self._eccs.fix_edge(tup.Source, tup.Target)
+            elif tup.Change == EdgeChange.FLIP and edge in self._eccs.graph.edges():
+                if edge[::-1] in self._true_graph.edges():
+                    self._eccs.remove_edge(tup.Source, tup.Target)
+                    self._eccs.add_edge(tup.Target, tup.Source)
+                    self._eccs.fix_edge(tup.Target, tup.Source)
+                else:
+                    self._eccs.fix_edge(tup.Source, tup.Target)
 
         # Update bookkeeping
         self._invocations += 1
         self._ate_trajectory.append(self.current_ate)
+        self._edit_disance_trajectory.append(self.current_graph_edit_distance)
+
+    def run(self, steps: int, method: str = None) -> None:
+        """
+        Simulate the user for `steps` steps. In each step, the user invokes the ECCS
+        system and updates the fixed and banned edges accordingly.
+
+        Parameters:
+            steps: The number of steps that the user executes
+            method: The method to use for edge suggestions.
+        """
+
+        for _ in range(steps):
+            self.invoke_eccs(method)
