@@ -15,9 +15,9 @@ class ECCSUser:
 
     def __init__(
         self,
-        data_path: str,
-        true_graph_path: str,
-        test_graph_path: str,
+        data: str | pd.DataFrame,
+        true_graph: str | nx.DiGraph,
+        test_graph: str | nx.DiGraph,
         treatment: str,
         outcome: str,
     ) -> None:
@@ -25,20 +25,32 @@ class ECCSUser:
         Initializes the ECCSUser object.
 
         Parameters:
-            data_path: The path to the dataset.
-            true_graph_path: The path to the ground truth causal graph.
-            test_graph_path: The path to the starting graph available to the user.
+            data: The dataset or the path to it.
+            true_graph: The ground truth causal graph or the path to it.
+            test_graph: The starting graph available to the user or the path to it.
             treatment: The name of the treatment variable.
             outcome: The name of the outcome variable.
         """
 
-        self._data = pd.read_csv(data_path)
-        self._true_graph = nx.DiGraph(nx.nx_pydot.read_dot(true_graph_path))
-        self._test_graph = nx.DiGraph(nx.nx_pydot.read_dot(test_graph_path))
+        if isinstance(data, str):
+            self._data = pd.read_csv(data)
+        else:
+            self._data = data
+
+        if isinstance(true_graph, str):
+            self._true_graph = nx.DiGraph(nx.nx_pydot.read_dot(true_graph))
+        else:
+            self._true_graph = true_graph
+
+        if isinstance(test_graph, str):
+            self._test_graph = nx.DiGraph(nx.nx_pydot.read_dot(test_graph))
+        else:
+            self._test_graph = test_graph
+
         self._treatment = treatment
         self._outcome = outcome
 
-        self._eccs = ECCS(data_path, test_graph_path)
+        self._eccs = ECCS(data, test_graph)
         self._eccs.set_treatment(treatment)
         self._eccs.set_outcome(outcome)
 

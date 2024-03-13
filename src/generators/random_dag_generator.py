@@ -5,6 +5,8 @@ from datetime import datetime
 import json
 import hashlib
 import os
+from ..eccs.graph_renderer import GraphRenderer
+from ..eccs.edge_state_matrix import EdgeStateMatrix, EdgeState
 
 
 class RandomDAGGenerator:
@@ -47,7 +49,7 @@ class RandomDAGGenerator:
         # Create a random DAG. Order nodes and only allow "forward" edges to ensure DAG.
         G = nx.DiGraph()
         for i in range(num_nodes):
-            G.add_node(i, name=f"{i}")
+            G.add_node(i, var_name=f"{i}")
 
         edge_matrix = np.array(
             [
@@ -108,6 +110,14 @@ class RandomDAGGenerator:
             np.save(os.path.join(out_path, f"{dag_name}_edge_matrix.npy"), edge_matrix)
             np.save(
                 os.path.join(out_path, f"{dag_name}_noise_matrix.npy"), noise_matrix
+            )
+            esm = EdgeStateMatrix([f"{i}" for i in range(num_nodes)])
+            for src, dst in G.edges():
+                esm.mark_edge(src, dst, EdgeState.PRESENT)
+            GraphRenderer.save_graph(
+                G,
+                esm,
+                os.path.join(out_path, f"{dag_name}_graph.png"),
             )
 
         out_dict = {

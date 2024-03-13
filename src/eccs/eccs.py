@@ -31,32 +31,32 @@ class ECCS:
         "Best single adjustment set change",
     ]
 
-    def __init__(self, data_path: str, graph_path: Optional[str]):
+    def __init__(self, data: str | pd.DataFrame, graph: str | nx.DiGraph):
         """
         Initialize the ECCS object.
 
         Parameters:
-            data_path: The path to the data file.
-            graph_path: Optionally, the path to the causal graph file in DOT format.
+            data: The dataset or the path to it.
+            graph: The causal DAG, or a path to a file containing the graph in DOT format.
         """
 
-        self._data_path = data_path
-        self._graph_path = graph_path
+        # Load data appropriately
+        if isinstance(data, str):
+            self._data = pd.read_csv(data)
+        else:
+            self._data = data
 
-        self._data = pd.read_csv(data_path)
         self._num_vars = self._data.shape[1]
-
         self._edge_decisions_matrix = EdgeStateMatrix(list(self._data.columns))
 
-        self._graph = nx.DiGraph()
-        if graph_path is not None:
-            # Load the graph from a file in DOT format into a networkx DiGraph object
-            graph = nx.DiGraph(nx.nx_pydot.read_dot(graph_path))
-            graph.add_nodes_from((n, {"name": n}) for n in graph.nodes)
-            for edge in graph.edges():
-                self.add_edge(edge[0], edge[1])
+        # Load graph appropriately
+        if isinstance(graph, str):
+            self._graph = nx.DiGraph(nx.nx_pydot.read_dot(graph))
         else:
-            self._graph.add_nodes_from(range(self._num_vars))
+            self._graph = graph
+        graph.add_nodes_from((n, {"var_name": n}) for n in graph.nodes)
+        for edge in graph.edges():
+            self.add_edge(edge[0], edge[1])
 
         # Ban self edges.
         for i in range(self._num_vars):
@@ -223,8 +223,8 @@ class ECCS:
                 to being manually added by the user.
         """
         if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.ABSENT):
-            self._graph.add_node(src, name=src)
-            self._graph.add_node(dst, name=dst)
+            self._graph.add_node(src, var_name=src)
+            self._graph.add_node(dst, var_name=dst)
             self._graph.add_edge(src, dst)
             target_state = EdgeState.SUGGESTED if is_suggested else EdgeState.PRESENT
             self._edge_decisions_matrix.mark_edge(src, dst, target_state)

@@ -1,0 +1,14 @@
+
+gen_dag: 
+  enabled: False
+  num_nodes: 5
+  edge_prob: 0.5
+  edge_weight_range: [-10,10]
+  edge_noise_sd_range: [0.001, 2]
+
+load_dag:
+  enabled: True
+  path: '../../datasets/evaluation'
+  dag_name: 'dag_b90ba55a'
+
+exit_after_1: True
