@@ -52,6 +52,7 @@ class ECCS:
         if graph_path is not None:
             # Load the graph from a file in DOT format into a networkx DiGraph object
             graph = nx.DiGraph(nx.nx_pydot.read_dot(graph_path))
+            graph.add_nodes_from((n, {"name": n}) for n in graph.nodes)
             for edge in graph.edges():
                 self.add_edge(edge[0], edge[1])
         else:
@@ -222,6 +223,8 @@ class ECCS:
                 to being manually added by the user.
         """
         if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.ABSENT):
+            self._graph.add_node(src, name=src)
+            self._graph.add_node(dst, name=dst)
             self._graph.add_edge(src, dst)
             target_state = EdgeState.SUGGESTED if is_suggested else EdgeState.PRESENT
             self._edge_decisions_matrix.mark_edge(src, dst, target_state)
@@ -355,7 +358,7 @@ class ECCS:
             self.data, treatment=treatment, outcome=outcome, graph=graph
         )["ATE"]
 
-    def suggest(self, method: str) -> tuple[float, str, pd.DataFrame]:
+    def suggest(self, method: str) -> tuple[pd.DataFrame, float]:
         """
         Suggest a modification to the graph that yields a maximally different ATE,
         compared to the current ATE. The modification should not edit edges that are
@@ -365,8 +368,7 @@ class ECCS:
             method: The method to use for suggestion. Must be in ECCS.EDGE_SUGGESTION_METHODS.
 
         Returns:
-            A tuple containing the suggested ATE, the suggested graph, and the suggested
-                modification(s) as a dataframe.
+          A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
 
         Raises:
             ValueError: If `method` is not in ECCS.EDGE_SUGGESTION_METHODS.
@@ -377,7 +379,7 @@ class ECCS:
 
         if method == "Best single edge change":
             return self._suggest_best_single_edge_change()
-        elif method == "Best single adjustment set addition":
+        elif method == "Best single adjustment set change":
             return self._suggest_best_single_adjustment_set_addition()
 
     def _edit_and_get_ate(self, edits: list[tuple[str, str, str]]) -> Optional[float]:
@@ -460,14 +462,14 @@ class ECCS:
         best_edits = pd.DataFrame(columns=["Source", "Destination", "Change"])
 
         def maybe_update_best(ate, edits):
+            nonlocal best_ate_diff
+            nonlocal furthest_ate
+            nonlocal best_edits
+
             if ate is None:
                 return
             ate_diff = abs(ate - base_ate)
             if ate_diff > best_ate_diff:
-                nonlocal best_ate_diff
-                nonlocal furthest_ate
-                nonlocal best_edits
-
                 best_ate_diff = ate_diff
                 furthest_ate = ate
                 best_edits = pd.DataFrame(
@@ -540,14 +542,14 @@ class ECCS:
         best_edits = pd.DataFrame(columns=["Source", "Destination", "Change"])
 
         def maybe_update_best(ate, edits):
+            nonlocal best_ate_diff
+            nonlocal furthest_ate
+            nonlocal best_edits
+
             if ate is None:
                 return
             ate_diff = abs(ate - base_ate)
             if ate_diff > best_ate_diff:
-                nonlocal best_ate_diff
-                nonlocal furthest_ate
-                nonlocal best_edits
-
                 best_ate_diff = ate_diff
                 furthest_ate = ate
                 best_edits = pd.DataFrame(
