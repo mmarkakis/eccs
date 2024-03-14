@@ -1,3 +1,4 @@
+import dihash
 import heapq
 import math
 import networkx as nx
@@ -41,9 +42,12 @@ class AStarSearch:
 
         # graph id -> (pred graph id, (start causal variable, end causal variable, boolean addition or deletion))
         # TODO: make this code look nicer with edge types (low priority)
+        # True is addition False is deletion
         self._predecessors = {}
         self._ATE_cache = {} # causal graph id -> ATE info
         self._visited = {}
+        self._hashtag_to_id = {}
+        self._cur_next_id = 0
     
     def _get_potential(self, v: Tuple[int, nx.DiGraph]):
         """
@@ -68,6 +72,36 @@ class AStarSearch:
             )
         )
         return ATE_info["ATE"] - self.gamma_1 * ATE_info["Standard Error"] + ATE_info["P-value"] + math.abs(len(v.edges() - self.n))
+    
+    def _get_neighbors(self, current_node_id: int):
+        graph: nx.DiGraph = self._visited[current_node_id]
+        results = []
+        for n1 in list(graph.nodes):
+            for n2 in list(graph.nodes):
+                if graph.has_edge(n1, n2):
+                    graph.remove_edge(n1, n2)
+                    hashtag = dihash.hash_graph(
+                        self.init_graph,
+                        hash_nodes=False,
+                        apply_quotient=False
+                    )
+                    graph.add_edge(n1, n2)
+                    if hashtag in self._hashtag_to_id: # already explored
+                        continue
+                    new_graph = graph.copy()
+                    self._hashtag_to_id[hashtag] = self._cur_next_id
+                    self._visited[self._cur_next_id] = new_graph
+                    self._predecessors[self._cur_next_id] = (current_node_id, (n1, n2, False))
+                    # TODO: Add a p-value filter
+                    results.append(self._cur_next_id)
+                    self._cur_next_id += 1
+                if n2 in nx.ancestors(graph, n1):
+                    continue # This creates a cycle
+                
+                # TODO: complete the addition case
+        
+        return results
+
 
     def heuristic(self, predecessor, node):
         # predecessor was taken from the frontier pq, node is the candidate for expansion
@@ -79,18 +113,28 @@ class AStarSearch:
         # g(n) = Phi(init) - Phi(current frontier of the path)
         return self._init_potential - self._get_potential(predecessor) - self._get_potential(node)
 
-    def astar(self, start, goal):
+    def astar(self, start, goal, k=100):
         # TODO: initialize ATE_init
-        open_list = [(0, 0)] # this is the pq (f(v), v), only store the ID
+        frontier = [(0, self._cur_next_id)] # this is the pq (f(v), v), only store the ID
+        self._cur_next_id += 1
+
+        top_k_candidates = [] # this is also a pq
+        start_hash = dihash.hash_graph(
+            self.init_graph,
+            hash_nodes=False,
+            apply_quotient=False
+        )
         self._visited[0] = self.init_graph # store actual graph here
+        self._hashtag_to_id[start_hash] = 0
         g_score = {node: float('inf') for node in self.graph.adj_list}
         g_score[start] = 0
         f_score = {node: float('inf') for node in self.graph.adj_list}
         f_score[start] = self.heuristic(start)
 
-        while open_list:
-            current_f, current_node = heapq.heappop(open_list)
+        while frontier:
+            _, current_node_id = heapq.heappop(frontier)
 
+            """ This is the path finding code
             if current_node == goal:
                 path = []
                 while current_node in self._predecessors:
@@ -98,15 +142,16 @@ class AStarSearch:
                     current_node = self._predecessors[current_node]
                 path.append(start)
                 return path[::-1]
+            """
 
-            for neighbor, cost in self.graph.get_neighbors(current_node):
+            for neighbor, cost in self._get_neighbors(current_node_id):
                 # when expanding neighbors, just discard ones that are too low p-value
                 tentative_g_score = g_score[current_node] + cost
                 if tentative_g_score < g_score[neighbor]:
                     self._predecessors[neighbor] = current_node
                     g_score[neighbor] = tentative_g_score
                     f_score[neighbor] = tentative_g_score + self.heuristic(neighbor)
-                    heapq.heappush(open_list, (f_score[neighbor], neighbor))
+                    heapq.heappush(frontier, (f_score[neighbor], neighbor))
 
         return None
 
