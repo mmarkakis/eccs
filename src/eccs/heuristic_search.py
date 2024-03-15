@@ -2,43 +2,23 @@ import dihash
 import heapq
 import math
 import networkx as nx
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from .ate import ATECalculator
 
-class Graph:
-    # def __init__(self, start_graph, edge_decision_matrix):
-        # self._edge_decision_matrix = edge_decision_matrix # EdgeStateMatrix
-        # self._start_graph = start_graph # nx.DiGraph
-    def __init__(self) -> None:    
-        self.adj_list = {'D': ['D']}
-
-    def add_edge(self, u, v, weight):
-        if u not in self.adj_list:
-            self.adj_list[u] = []
-        self.adj_list[u].append((v, weight))
-
-    def get_neighbors(self, node):
-        if node in self.adj_list:
-            return self.adj_list[node]
-        else:
-            return []
-
 class AStarSearch:
-    def __init__(self, graph):
-        self.graph = graph
+    def __init__(self, init_graph, treatment, outcome, data, gamma_1=0.5, gamma_2=0.5, p_value_threshold=0.5):
         # n is the number of causal variables
         # m is the number of edges in the initial graph
-        self.m = len(graph.edges())
-        self.n = 0
-        self.ATE_init = 0
-        self.init_graph = None
-        self._init_potential = 0 # TODO: initialize this
-        self.treatment = None
-        self.outcome = None
-        self.data = None
-        self.gamma_1 = 0
-        self.gamma_2 = 0
+        self.m = len(init_graph.edges())
+        self.n = len(init_graph.nodes())
+        self.init_graph = init_graph
+        self.treatment = treatment
+        self.outcome = outcome
+        self.data = data
+        self.gamma_1 = gamma_1
+        self.gamma_2 = gamma_2
+        self.p_value_threshold = p_value_threshold
 
         # graph id -> (pred graph id, (start causal variable, end causal variable, boolean addition or deletion))
         # TODO: make this code look nicer with edge types (low priority)
@@ -50,6 +30,11 @@ class AStarSearch:
         self._id_to_graph = {}
         self._cur_next_id = 0
         self._computational_budget = 1000000
+
+        init_ATE_info = self._get_ATE_info(0, init_graph)
+        assert 0 in self._ATE_cache
+        self.ATE_init = init_ATE_info["ATE"]
+        self._init_potential = self._get_potential(0, init_graph)
     
     def _get_ATE_info(self, id: int, graph: nx.DiGraph):
         try:
@@ -99,7 +84,7 @@ class AStarSearch:
 
         id = self._hashtag_to_id[hashtag]
         ATE_info = self._get_ATE_info(id, graph)
-        if ATE_info["P-value"] < 0.5: # TODO: look at this p-value threshold
+        if ATE_info["P-value"] < self.p_value_threshold:
             self._visited.add(id) # discard
 
         result = None
@@ -146,8 +131,9 @@ class AStarSearch:
         # g(n) = Phi(init) - Phi(current frontier of the path)
         return self._init_potential - self._get_potential(predecessor) - self._get_potential(node)
 
-    def astar(self, start, goal, k=100):
-        # TODO: initialize ATE_init
+    def astar(self, k=100):
+        # Side effect: prints the top 10 result
+        # Returns the most frequently seen edge flips in sorted order
         frontier = [(0, self._cur_next_id)] # this is the pq (f(v), v), only store the ID
         self._cur_next_id += 1
 
@@ -158,25 +144,16 @@ class AStarSearch:
         )
         self._visited[0] = self.init_graph # store actual graph here
         self._hashtag_to_id[start_hash] = 0
-        g_score = {node: float('inf') for node in self.graph.adj_list}
-        g_score[start] = 0
-        f_score = {node: float('inf') for node in self.graph.adj_list}
-        f_score[start] = self.heuristic(start)
+        g_score = {}
+        # starting node always has id 0
+        g_score[0] = 0
+        f_score = {}
+        f_score[0] =  - self._get_potential(0, self.init_graph)
 
         top_k_candidates = []
 
         while frontier:
             _, current_node_id = heapq.heappop(frontier)
-
-            """ This is the path finding code
-            if current_node == goal:
-                path = []
-                while current_node in self._predecessors:
-                    path.append(current_node)
-                    current_node = self._predecessors[current_node]
-                path.append(start)
-                return path[::-1]
-            """
             self._visited.add(current_node_id)
             heapq.heappush(top_k_candidates, (self._get_potential(current_node_id, self._id_to_graph[current_node_id], current_node_id)))
             if len(top_k_candidates) > k:
@@ -211,16 +188,9 @@ class AStarSearch:
         sorted_edges = sorted(edge_tally.items(), key=lambda x:x[1])
         print(sorted_edges[:10])
 
-        return None
+        return sorted_edges
 
-# Example usage:
 if __name__ == "__main__":
-    graph = Graph()
-    graph.add_edge('A', 'B', 5)
-    graph.add_edge('A', 'C', 3)
-    graph.add_edge('B', 'D', 9)
-    graph.add_edge('C', 'D', 4)
 
     astar_search = AStarSearch(graph)
-    path = astar_search.astar('A', 'D')
-    print("Path found:", path)
+    astar_search.astar('A', 'D')
