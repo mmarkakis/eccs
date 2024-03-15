@@ -9,6 +9,7 @@ from itertools import combinations
 from tqdm.auto import tqdm
 from stqdm import stqdm
 import multiprocessing
+import numpy as np
 
 
 class EdgeChange:
@@ -27,8 +28,9 @@ class ECCS:
     """
 
     EDGE_SUGGESTION_METHODS = [
-        "Best single edge change",
-        "Best single adjustment set change",
+        "best_single_edge_change",
+        "best_single_adjustment_set_change",
+        "random_single_edge_change",
     ]
 
     def __init__(self, data: str | pd.DataFrame, graph: str | nx.DiGraph):
@@ -377,10 +379,12 @@ class ECCS:
         if method not in ECCS.EDGE_SUGGESTION_METHODS:
             raise ValueError(f"Invalid method: {method}")
 
-        if method == "Best single edge change":
+        if method == "best_single_edge_change":
             return self._suggest_best_single_edge_change()
-        elif method == "Best single adjustment set change":
+        elif method == "best_single_adjustment_set_change":
             return self._suggest_best_single_adjustment_set_addition()
+        elif method == "random_single_edge_change":
+            return self._suggest_random_single_edge_change()
 
     def _edit_and_get_ate(self, edits: list[tuple[str, str, str]]) -> Optional[float]:
         """
@@ -451,7 +455,7 @@ class ECCS:
         self,
     ) -> Tuple[pd.DataFrame, float]:
         """
-        Suggest the best single edge change that maximally changes the ATE.
+        Suggest the best_single_edge_change that maximally changes the ATE.
 
         Returns:
             A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
@@ -529,7 +533,7 @@ class ECCS:
         self,
     ) -> Tuple[pd.DataFrame, float]:
         """
-        Suggest the best single adjustment set changes that maximally changes the ATE.
+        Suggest the best_single_adjustment_set_changes that maximally changes the ATE.
 
         Changes are translated to edge changes in a rudimentary manner.
 
@@ -593,3 +597,89 @@ class ECCS:
             maybe_update_best(ate, edits)
 
         return (best_edits, furthest_ate)
+
+    def _suggest_random_single_edge_change(
+        self,
+    ) -> Tuple[pd.DataFrame, float]:
+        """
+        Suggest a random_single_edge_change.
+
+        Returns:
+            A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
+        """
+
+        while True:
+            # Pick edge endpoints at random
+            i = np.random.randint(self._num_vars)
+            j = np.random.randint(self._num_vars)
+
+            if i == j:
+                continue
+
+            # Extract edge endpoints
+            e1 = self._data.columns[i]
+            e2 = self._data.columns[j]
+
+            # Extract edge states
+            f_state = self._edge_decisions_matrix.get_edge_state(e1, e2)
+            r_state = self._edge_decisions_matrix.get_edge_state(e2, e1)
+
+            if (
+                f_state == EdgeState.FIXED
+                or r_state == EdgeState.FIXED
+                or (f_state == EdgeState.BANNED and r_state == EdgeState.BANNED)
+            ):
+                continue
+
+            if f_state == EdgeState.BANNED:
+                # Toggle the state of the inverse edge
+                if r_state == EdgeState.ABSENT:
+                    return (
+                        pd.DataFrame([(e2, e1, EdgeChange.ADD)]),
+                        self._edit_and_get_ate([(e2, e1, EdgeChange.ADD)]),
+                    )
+                else:
+                    return (
+                        pd.DataFrame([(e2, e1, EdgeChange.REMOVE)]),
+                        self._edit_and_get_ate([(e2, e1, EdgeChange.REMOVE)]),
+                    )
+
+            if r_state == EdgeState.BANNED:
+                # Toggle the state of the forward edge
+                if f_state == EdgeState.ABSENT:
+                    return (
+                        pd.DataFrame([(e1, e2, EdgeChange.ADD)]),
+                        self._edit_and_get_ate([(e1, e2, EdgeChange.ADD)]),
+                    )
+                else:
+                    return (
+                        pd.DataFrame([(e1, e2, EdgeChange.REMOVE)]),
+                        self._edit_and_get_ate([(e1, e2, EdgeChange.REMOVE)]),
+                    )
+
+            # At this point neither is fixed and neither is banned.
+
+            if f_state == EdgeState.PRESENT:
+                # Try removing the edge
+                return (
+                    pd.DataFrame([(e1, e2, EdgeChange.REMOVE)]),
+                    self._edit_and_get_ate([(e1, e2, EdgeChange.REMOVE)]),
+                )
+            elif r_state == EdgeState.PRESENT:
+                # Try removing the edge
+                return (
+                    pd.DataFrame([(e2, e1, EdgeChange.REMOVE)]),
+                    self._edit_and_get_ate([(e2, e1, EdgeChange.REMOVE)]),
+                )
+            elif pd.random.choice([True, False]):
+                # Try adding in the "forward" direction
+                return (
+                    pd.DataFrame([(e1, e2, EdgeChange.ADD)]),
+                    self._edit_and_get_ate([(e1, e2, EdgeChange.ADD)]),
+                )
+            else:
+                # Try adding in the "reverse" direction
+                return (
+                    pd.DataFrame([(e2, e1, EdgeChange.ADD)]),
+                    self._edit_and_get_ate([(e2, e1, EdgeChange.ADD)]),
+                )
