@@ -40,7 +40,6 @@ async def main():
     dag_name = None
     dag_dict = {}
     if "gen_dag" in config and config["gen_dag"]["enabled"]:
-        print("boop")
         num_nodes = config["gen_dag"]["num_nodes"]
         edge_prob = config["gen_dag"]["edge_prob"]
         edge_weight_range = tuple(config["gen_dag"]["edge_weight_range"])
@@ -110,6 +109,28 @@ async def main():
             nx.nx_pydot.read_dot(
                 os.path.join(path, f"{dataset_name}_{method}_{option}.dot")
             )
+        )
+    elif (
+        "random_starting_graph" in config and config["random_starting_graph"]["enabled"]
+    ):
+        num_nodes = config["random_starting_graph"]["num_nodes"]
+        edge_prob = config["random_starting_graph"]["edge_prob"]
+        edge_weight_range = tuple(config["random_starting_graph"]["edge_weight_range"])
+        edge_noise_sd_range = tuple(
+            config["random_starting_graph"]["edge_noise_sd_range"]
+        )
+        dag_dict = RandomDAGGenerator.generate(
+            num_nodes, edge_prob, edge_weight_range, edge_noise_sd_range, args.out_path
+        )
+        starting_graph = dag_dict["graph"]
+    elif (
+        "load_random_starting_graph" in config
+        and config["load_random_starting_graph"]["enabled"]
+    ):
+        path = config["load_random_starting_graph"]["path"]
+        dag_name = config["load_random_starting_graph"]["dag_name"]
+        starting_graph = nx.DiGraph(
+            nx.nx_pydot.read_dot(os.path.join(path, f"{dag_name}_graph.dot"))
         )
     else:
         raise ValueError("No starting graph generation or loading parameters specified")
