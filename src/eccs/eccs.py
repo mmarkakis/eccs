@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Any, List, Optional, Tuple
 import pandas as pd
 import networkx as nx

@@ -7,9 +7,10 @@ from typing import List, Optional
 from .ate import ATECalculator
 
 class AStarSearch:
-    def __init__(self, init_graph, treatment, outcome, data, gamma_1=0.5, gamma_2=0.5, p_value_threshold=0.5):
+    def __init__(self, init_graph, treatment, outcome, data, gamma_1=0.5, gamma_2=0.5, p_value_threshold=0.5, computational_budget=100000):
         # n is the number of causal variables
         # m is the number of edges in the initial graph
+        print("Initializing A star")
         self.m = len(init_graph.edges())
         self.n = len(init_graph.nodes())
         self.init_graph = init_graph
@@ -29,7 +30,7 @@ class AStarSearch:
         self._hashtag_to_id = {} # This notes that something is hashed
         self._id_to_graph = {}
         self._cur_next_id = 0
-        self._computational_budget = 1000000
+        self._computational_budget = computational_budget
 
         init_ATE_info = self._get_ATE_info(0, init_graph)
         assert 0 in self._ATE_cache
