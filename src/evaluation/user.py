@@ -146,6 +146,16 @@ class ECCSUser:
             The trajectory of the ATE over the invocations.
         """
         return self._ate_trajectory
+    
+    @property
+    def abs_ate_diff_trajectory(self) -> list[float]:
+        """
+        Returns the trajectory of the absolute ATE difference over the invocations.
+
+        Returns:
+            The trajectory of the absolute ATE difference over the invocations.
+        """
+        return [abs(self.true_ate - ate) for ate in self._ate_trajectory]
 
     @property
     def edit_distance_trajectory(self) -> list[int]:

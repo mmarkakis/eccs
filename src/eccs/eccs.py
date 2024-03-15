@@ -631,55 +631,38 @@ class ECCS:
             ):
                 continue
 
+            edit = ()
+
             if f_state == EdgeState.BANNED:
                 # Toggle the state of the inverse edge
                 if r_state == EdgeState.ABSENT:
-                    return (
-                        pd.DataFrame([(e2, e1, EdgeChange.ADD)]),
-                        self._edit_and_get_ate([(e2, e1, EdgeChange.ADD)]),
-                    )
+                    edit = (e2, e1, EdgeChange.ADD)
                 else:
-                    return (
-                        pd.DataFrame([(e2, e1, EdgeChange.REMOVE)]),
-                        self._edit_and_get_ate([(e2, e1, EdgeChange.REMOVE)]),
-                    )
+                    edit = (e2, e1, EdgeChange.REMOVE)
 
             if r_state == EdgeState.BANNED:
                 # Toggle the state of the forward edge
                 if f_state == EdgeState.ABSENT:
-                    return (
-                        pd.DataFrame([(e1, e2, EdgeChange.ADD)]),
-                        self._edit_and_get_ate([(e1, e2, EdgeChange.ADD)]),
-                    )
+                    edit = (e1, e2, EdgeChange.ADD)
                 else:
-                    return (
-                        pd.DataFrame([(e1, e2, EdgeChange.REMOVE)]),
-                        self._edit_and_get_ate([(e1, e2, EdgeChange.REMOVE)]),
-                    )
+                    edit = (e1, e2, EdgeChange.REMOVE)
 
             # At this point neither is fixed and neither is banned.
-
             if f_state == EdgeState.PRESENT:
-                # Try removing the edge
-                return (
-                    pd.DataFrame([(e1, e2, EdgeChange.REMOVE)]),
-                    self._edit_and_get_ate([(e1, e2, EdgeChange.REMOVE)]),
-                )
+                edit = (e1, e2, EdgeChange.REMOVE)
             elif r_state == EdgeState.PRESENT:
-                # Try removing the edge
-                return (
-                    pd.DataFrame([(e2, e1, EdgeChange.REMOVE)]),
-                    self._edit_and_get_ate([(e2, e1, EdgeChange.REMOVE)]),
-                )
-            elif pd.random.choice([True, False]):
-                # Try adding in the "forward" direction
-                return (
-                    pd.DataFrame([(e1, e2, EdgeChange.ADD)]),
-                    self._edit_and_get_ate([(e1, e2, EdgeChange.ADD)]),
-                )
+                edit = (e2, e1, EdgeChange.REMOVE)
+            elif np.random.choice([True, False]):
+                edit = (e1, e2, EdgeChange.ADD)
             else:
-                # Try adding in the "reverse" direction
-                return (
-                    pd.DataFrame([(e2, e1, EdgeChange.ADD)]),
-                    self._edit_and_get_ate([(e2, e1, EdgeChange.ADD)]),
-                )
+                edit = (e2, e1, EdgeChange.ADD)
+
+            ate = self._edit_and_get_ate([edit])
+
+            if ate == None:
+                continue
+
+            return (
+                pd.DataFrame([edit], columns=["Source", "Destination", "Change"]),
+                ate,
+            )

@@ -132,7 +132,7 @@ async def main():
         path = config["load_random_starting_graph"]["path"]
         starting_graph_name = config["load_random_starting_graph"]["dag_name"]
         starting_graph = nx.DiGraph(
-            nx.nx_pydot.read_dot(os.path.join(path, f"{dag_name}_graph.dot"))
+            nx.nx_pydot.read_dot(os.path.join(path, f"{starting_graph_name}_graph.dot"))
         )
     else:
         raise ValueError("No starting graph generation or loading parameters specified")
@@ -156,12 +156,12 @@ async def main():
             outcome,
         )
         user.run(num_steps, method)
-        ate_trajectory = user.ate_trajectory
+        ate_trajectory = user.abs_ate_diff_trajectory
         edit_distance_trajectory = user.edit_distance_trajectory
         np.save(
             os.path.join(
                 args.out_path,
-                f"{dataset_name}_{starting_graph_name}_{method}_{num_steps}_ate_trajectory.npy",
+                f"{dataset_name}_{starting_graph_name}_{method}_{num_steps}_abs_ate_diff_trajectory.npy",
             ),
             ate_trajectory,
         )
@@ -178,7 +178,7 @@ async def main():
         num_steps = config["load_eccs"]["num_steps"]
         ate_trajectory = np.load(
             os.path.join(
-                path, f"{dataset_name}_{method}_{num_steps}_ate_trajectory.npy"
+                path, f"{dataset_name}_{method}_{num_steps}_abs_ate_diff_trajectory.npy"
             )
         )
         edit_distance_trajectory = np.load(
