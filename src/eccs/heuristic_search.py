@@ -180,17 +180,14 @@ class AStarSearch:
             while c_id in self._predecessors:
                 n1, n2, _ = self._predecessors[c_id]
                 if (n1, n2) not in edge_tally:
-                    edge_tally[(n1, n2)] = 1
+                    edge_tally[(n1, n2)] = (1, math.abs(self._ATE_cache[c_id]["ATE"] - self.ATE_init))
                 else:
-                    edge_tally[(n1, n2)] += 1
+                    cnt = edge_tally[(n1, n2)][0] + 1
+                    total_diff = edge_tally[(n1, n2)][1] + math.abs(self._ATE_cache[c_id]["ATE"] - self.ATE_init)
+                    edge_tally[(n1, n2)] = (cnt, total_diff)
                 current_node = self._predecessors[current_node]
 
-        sorted_edges = sorted(edge_tally.items(), key=lambda x:x[1])
+        sorted_edges = sorted(edge_tally.items(), key=lambda x:x[1][0])
         print(sorted_edges[:10])
 
         return sorted_edges
-
-if __name__ == "__main__":
-
-    astar_search = AStarSearch(graph)
-    astar_search.astar('A', 'D')
