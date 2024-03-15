@@ -17,6 +17,7 @@ from typing import Callable, Optional
 from ..eccs.graph_renderer import GraphRenderer
 from ..eccs.edge_state_matrix import EdgeStateMatrix, EdgeState
 import asyncio
+import os
 
 
 DEFAULT_TIMEOUT_SECONDS = 30 * 60  # 30 mintues
@@ -61,20 +62,27 @@ class CausalDiscovery:
 
     """
 
-    def __init__(self, dataset_name: str, dataset_path: str) -> None:
+    def __init__(self, dataset_name: str, dataset: str | pd.DataFrame) -> None:
         """
         Initializes the CausalDiscovery object.
 
         Parameters:
             dataset_name: The name of the dataset.
-            dataset_path: The path to the dataset.
+            dataset: The dataset or a path to it.
 
         """
         self._dataset_name = dataset_name
-        self._dataset_path = dataset_path
+
+        if isinstance(dataset, str):
+            data_df = pd.read_csv(self.dataset)
+            self._var_names = data_df.columns
+            self._data = data_df.to_numpy().astype(float)
+        else:
+            self._var_names = list(dataset.columns)
+            self._data = dataset.to_numpy().astype(float)
 
     async def run_with_timer(
-        self, method: str, option: str, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
+        self, method: str, option: str, out_path: str, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
     ) -> tuple[nx.DiGraph, float]:
         """
         Runs the causal discovery `method` with the specified `option`,
@@ -83,6 +91,7 @@ class CausalDiscovery:
         Parameters:
             method: The causal discovery method to run.
             option: The option to use for the causal discovery method.
+            out_path: The path to save the results.
             timeout_seconds: The maximum time to allow the method to run.
 
         Returns:
@@ -103,10 +112,7 @@ class CausalDiscovery:
         fres.write(f"dataset_name,method_name,option,result,time\n")
         fres.flush()
 
-        # Load the data
-        data_df = pd.read_csv(self._dataset_path)
-        var_names = data_df.columns
-        data = data_df.to_numpy().astype(float)
+        
 
         ##############################
 
@@ -134,19 +140,19 @@ class CausalDiscovery:
             return nx_cg
 
         def run_pc(option):
-            cg = pc(data, indep_test=option, show_progress=False)
+            cg = pc(self._data, indep_test=option, show_progress=False)
             cg.to_nx_graph()
             return cg.nx_graph
 
         def run_fci(option):
-            cg, _ = fci(data, independence_test_method=option, show_progress=False)
+            cg, _ = fci(self._data, independence_test_method=option, show_progress=False)
             nx_cg = general_graph_to_nx_digraph(cg)
             return nx_cg
 
         def run_lingam(option):
             model = lingam.ICALiNGAM()
-            model.fit(data)
-            gv_cg = make_dot(model.adjacency_matrix_, labels=list(data_df.columns))
+            model.fit(self._data)
+            gv_cg = make_dot(model.adjacency_matrix_, labels=self._var_names)
 
             # Convert the Graphviz Digraph to NetworkX DiGraph
             nx_cg = nx.DiGraph()
@@ -161,22 +167,22 @@ class CausalDiscovery:
             return nx_cg
 
         def run_gin(option):
-            cg, _ = GIN.GIN(data, indep_test_method=option)
+            cg, _ = GIN.GIN(self._data, indep_test_method=option)
             nx_cg = general_graph_to_nx_digraph(cg)
             return nx_cg
 
         def run_grasp(option):
-            cg = grasp(data, score_func=option)
+            cg = grasp(self._data, score_func=option)
             nx_cg = general_graph_to_nx_digraph(cg)
             return nx_cg
 
         def run_ges(option):
-            record = ges(data, score_func=option)
+            record = ges(self._data, score_func=option)
             nx_cg = general_graph_to_nx_digraph(record["G"])
             return nx_cg
 
         def run_exact_search(option):
-            matrix = bic_exact_search(data, search_method=option)
+            matrix = bic_exact_search(self._data, search_method=option)
             # Convert the matrix to a NetworkX DiGraph
             # If matrix[i,j] == 1, then there is an edge from i to j
             nx_cg = nx.DiGraph()
@@ -222,16 +228,16 @@ class CausalDiscovery:
                 fres.flush()
 
                 # Save the graph as png
-                esm = EdgeStateMatrix(var_names)
+                esm = EdgeStateMatrix(self._var_names)
                 for src, dst in nx_cg.edges():
                     esm.mark_edge(src, dst, EdgeState.PRESENT)
                 GraphRenderer.save_graph(
-                    nx_cg, esm, f"{self._dataset_name}_{method}_{option}.png"
+                    nx_cg, esm, os.path.join(out_path, f"{self._dataset_name}_{method}_{option}.png")
                 )
 
                 # Write out graph in dot format
                 nx.nx_pydot.write_dot(
-                    nx_cg, f"{self._dataset_name}_{method}_{option}.dot"
+                    nx_cg, os.path.join(out_path, f"{self._dataset_name}_{method}_{option}.dot")
                 )
 
                 return nx_cg

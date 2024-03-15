@@ -24,4 +24,22 @@ load_dataset:
   path: '../../datasets/evaluation'
   dataset_name: 'dag_b90ba55a_dataset_a7918e64'
 
-exit_after_2: True
+exit_after_2: False
+
+gen_starting_graph:
+  enabled: False
+  method: 'pc'
+  option: 'kci'
+  out_path: '../../datasets/evaluation'
+
+load_starting_graph:
+  enabled: True
+  path: '../../datasets/evaluation'
+  method: 'pc'
+  option: 'kci'
+
+exit_after_3: True
+
+
+
+

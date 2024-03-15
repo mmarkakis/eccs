@@ -1,0 +1,26 @@
+2024-03-15 01:14:50.207006 Running pc with fisherz
+2024-03-15 01:14:50.208248 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x74298ff6c0e0>: Data correlation matrix is singular. Cannot run fisherz test. Please check your data.
+2024-03-15 01:14:50.208329 Done running pc with fisherz. Took 0.000 seconds
+2024-03-15 01:17:24.197970 Running pc with fisherz
+2024-03-15 01:17:24.199226 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x73045e7940e0>: Data correlation matrix is singular. Cannot run fisherz test. Please check your data.
+2024-03-15 01:17:24.199310 Done running pc with fisherz. Took 0.000 seconds
+2024-03-15 01:18:05.487079 Running pc with kci
+2024-03-15 01:19:02.976773 Writing out pc with kci
+2024-03-15 01:19:03.160542 Done running pc with kci. Took 57.000 seconds
+2024-03-15 01:20:17.759830 Running pc with chisq
+2024-03-15 01:20:17.925717 Done running pc with chisq. Took 0.000 seconds
+2024-03-15 01:25:21.118238 Running pc with gsq
+2024-03-15 01:25:21.345330 Done running pc with gsq. Took 0.000 seconds
+2024-03-15 01:26:07.530995 Running pc with gsq
+2024-03-15 01:26:07.757141 Done running pc with gsq. Took 0.000 seconds
+2024-03-15 01:26:16.434062 Running fci with gsq
+2024-03-15 01:26:16.660437 Done running fci with gsq. Took 0.000 seconds
+2024-03-15 01:26:33.211483 Running lingam with default
+/home/markakis/eccs/eccs-venv/lib/python3.11/site-packages/sklearn/decomposition/_fastica.py:128: ConvergenceWarning: FastICA did not converge. Consider increasing tolerance or the maximum number of iterations.
+  warnings.warn(
+2024-03-15 01:26:33.356656 Writing out lingam with default
+2024-03-15 01:26:33.356725 Error running <function CausalDiscovery.run_with_timer.<locals>.run_lingam at 0x737d427cc040>: '1 [label=-8.82]' is not in list
+2024-03-15 01:26:33.356788 Done running lingam with default. Took 0.000 seconds
+2024-03-15 01:26:53.337010 Running pc with kci
+2024-03-15 01:27:46.712510 Writing out pc with kci
+2024-03-15 01:27:46.872838 Done running pc with kci. Took 53.000 seconds
