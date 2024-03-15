@@ -38,7 +38,15 @@ load_starting_graph:
   method: 'pc'
   option: 'kci'
 
-exit_after_3: True
+exit_after_3: False
+
+run_eccs:
+  enabled: True
+  treatment: '1'
+  outcome: '4'
+  num_steps: 10
+  method: 'Best single edge change'
+
 
 
 

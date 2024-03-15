@@ -216,6 +216,9 @@ class CausalDiscovery:
                     )
                     fres.flush()
                     return
+                
+                # Convert to a DAG
+                nx_cg = CausalDiscovery.dagify(nx_cg)
 
                 # Remove isolated nodes
                 nx_cg.remove_nodes_from(list(nx.isolates(nx_cg)))
@@ -277,3 +280,31 @@ class CausalDiscovery:
         fres.close()
 
         return nx_cg, duration
+    
+
+    @staticmethod
+    def dagify(graph: nx.DiGraph) -> nx.DiGraph:
+        """
+        Converts the given graph to a DAG by deleting an
+        arbitrary edge from each cycle.
+
+        Parameters:
+            graph: The graph to convert to a DAG.
+
+        Returns:
+            The graph as a DAG.
+        """
+
+        dag = graph.copy()
+
+        while True:
+            try:
+                cycle = nx.find_cycle(dag, orientation='original')
+                for src,dst in cycle:
+                    if src >= dst:
+                        print(src,dst)
+                        dag.remove_edge(src,dst)
+                        break
+            except nx.NetworkXNoCycle:
+                return dag  
+        

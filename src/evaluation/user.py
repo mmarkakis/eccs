@@ -67,7 +67,7 @@ class ECCSUser:
             The true ATE of the treatment on the outcome.
         """
         return ATECalculator.get_ate_and_confidence(
-            self._true_graph, self._treatment, self._outcome
+            self._data, self._treatment, self._outcome, self._true_graph
         )
 
     @property
@@ -79,7 +79,7 @@ class ECCSUser:
             The ATE of the treatment on the outcome based on the current graph.
         """
         return ATECalculator.get_ate_and_confidence(
-            self._eccs.graph, self._treatment, self._outcome
+            self._data, self._treatment, self._outcome, self._eccs.graph
         )
 
     @property
@@ -103,7 +103,7 @@ class ECCSUser:
         return nx.graph_edit_distance(
             self._true_graph,
             self._eccs.graph,
-            node_match=(lambda n1, n2: n1.name == n2.name),
+            node_match=(lambda n1, n2: n1['var_name'] == n2['var_name']),
             edge_subst_cost=(lambda x, y: np.inf),
         )
 
