@@ -57,7 +57,7 @@ run_eccs:
   treatment: '2'
   outcome: '4'
   num_steps: 10
-  method: 'Best single edge change'
+  method: 'best_single_edge_change'
 
 
 
