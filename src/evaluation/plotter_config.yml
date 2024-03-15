@@ -1,0 +1,5 @@
+path: "../../datasets/evaluation/"
+true_graph_name: "dag_b90ba55a"
+dataset_name: "dataset_a7918e64"
+starting_graph_name: "dag_3b51d34e"
+user_interactions: 10
