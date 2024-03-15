@@ -36,6 +36,7 @@ class AStarSearch:
         assert 0 in self._ATE_cache
         self.ATE_init = init_ATE_info["ATE"]
         self._init_potential = self._get_potential(0, init_graph)
+        print("Initialization finished")
     
     def _get_ATE_info(self, id: int, graph: nx.DiGraph):
         try:
@@ -43,8 +44,8 @@ class AStarSearch:
         except KeyError:
             ate = ATECalculator.get_ate_and_confidence(
                 data=self.data,
-                treatment=self.treatment,
-                outcome=self.outcome,
+                treatment=str(self.treatment),
+                outcome=str(self.outcome),
                 graph=graph,
                 calculate_p_value=True,
                 calculate_std_error=True,

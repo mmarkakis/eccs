@@ -152,10 +152,10 @@ async def main():
         # num_steps = config["run_eccs"]["num_steps"]
         method = config["run_eccs"]["method"]
         a_star = AStarSearch(
-            data=dataset_dict["data"],
-            starting_graph=starting_graph,
-            treatment=treatment,
-            outcome=outcome
+            data=dataset_dict["data"].astype(int),
+            init_graph=starting_graph,
+            treatment=int(treatment), # we have str rn and it expects num
+            outcome=int(outcome)
         )
         a_star.astar()
 
