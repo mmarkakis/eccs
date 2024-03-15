@@ -66,7 +66,7 @@ def main():
     # 2. Generate or load the dataset
     dataset_name = None
     dataset_dict = {}
-    if config["gen_dataset"]:
+    if "gen_dataset" in config and config["gen_dataset"]["enabled"]:
         num_points = config["gen_dataset"]["num_points"]
         min_source_val = config["gen_dataset"]["min_source_val"]
         max_source_val = config["gen_dataset"]["max_source_val"]
@@ -79,10 +79,11 @@ def main():
             max_source_val,
             args.out_path,
         )
-    elif config["load_dataset"]:
+    elif "load_dataset" in config and config["load_dataset"]["enabled"]:
         path = config["load_dataset"]["path"]
+        dataset_name = config["load_dataset"]["dataset_name"]
         dataset_dict = {
-            "name": config["load_dataset"]["dataset_name"],
+            "name": dataset_name,
             "data": pd.read_csv(os.path.join(path, f"{dataset_name}.csv")),
         }
     else:

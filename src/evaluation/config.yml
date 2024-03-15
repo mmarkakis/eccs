@@ -11,4 +11,17 @@ load_dag:
   path: '../../datasets/evaluation'
   dag_name: 'dag_b90ba55a'
 
-exit_after_1: True
+exit_after_1: False
+
+gen_dataset:
+  enabled: False
+  num_points: 1000
+  min_source_val: -10
+  max_source_val: 10
+
+load_dataset:
+  enabled: True
+  path: '../../datasets/evaluation'
+  dataset_name: 'dag_b90ba55a_dataset_a7918e64'
+
+exit_after_2: True
