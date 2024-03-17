@@ -229,6 +229,7 @@ async def main():
                                 eccs_results_path,
                                 dataset_name,
                                 num_steps,
+                                None
                             )
                         )
 

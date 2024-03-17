@@ -2,20 +2,81 @@ import numpy as np
 import matplotlib.pyplot as plt
 import yaml
 import os
+import argparse
 
 
 def main():
-    # Load the configuration file
-    with open("plotter_config.yml", "r") as f:
-        config = yaml.safe_load(f)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--path", type=str, required=True, help="Path to the results")
+    args = parser.parse_args()
 
-    path = config["path"]
-    true_graph_name = config["true_graph_name"]
-    dataset_name = config["dataset_name"]
-    starting_graph_name = config["starting_graph_name"]
-    user_interactions = config["user_interactions"]
+
+    # Load the experiment configuration file
+    with open(os.path.join(args.path, 'config.yml'), "r") as f:
+        config = yaml.safe_load(f)
+    baselines_path = os.path.join(args.path, "baseline_results")
+
+
+    # Create a directory for the plots
+    plots_path = os.path.join(args.path, "plots")
+    os.makedirs(plots_path, exist_ok=True)
+
 
     ### Graph edit distance
+    print("Graph edit distance:")
+    accumulator = None
+    file_count = 0
+
+    for filename in os.listdir(baselines_path):
+        if filename.endswith('edit_distance_trajectory.npy'):
+            # Load the list from the file
+            filepath = os.path.join(baselines_path, filename)
+            data = np.load(filepath)
+
+            if accumulator is None:
+                # Initialize the accumulator with the first list
+                accumulator = data
+            else:
+                # Add the current list to the accumulator
+                accumulator += data
+
+            file_count += 1
+
+    if file_count > 0:
+        elementwise_average = accumulator / file_count
+
+    print(file_count)
+    print(elementwise_average)
+
+
+    ### Absolute ATE difference
+    print("Absolute ATE difference:")
+    accumulator = None
+    file_count = 0
+
+    for filename in os.listdir(baselines_path):
+        if filename.endswith('abs_ate_diff_trajectory.npy'):
+            # Load the list from the file
+            filepath = os.path.join(baselines_path, filename)
+            data = np.load(filepath)
+
+            if accumulator is None:
+                # Initialize the accumulator with the first list
+                accumulator = data
+            else:
+                # Add the current list to the accumulator
+                accumulator += data
+
+            file_count += 1
+
+    if file_count > 0:
+        elementwise_average = accumulator / file_count
+
+    print(file_count)
+    print(elementwise_average)
+    
+    return
+
 
     file_path_best = os.path.join(
         path,
