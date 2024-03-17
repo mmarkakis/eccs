@@ -49,7 +49,7 @@ class RandomDAGGenerator:
         # Create a random DAG. Order nodes and only allow "forward" edges to ensure DAG.
         G = nx.DiGraph()
         for i in range(num_nodes):
-            G.add_node(i, var_name=f"{i}")
+            G.add_node(f"v{i}", var_name=f"v{i}")
 
         edge_matrix = np.array(
             [
@@ -87,7 +87,10 @@ class RandomDAGGenerator:
             for j in range(i, num_nodes):
                 if edge_matrix[i, j] != 0:
                     G.add_edge(
-                        i, j, weight=edge_matrix[i, j], noise_sd=noise_matrix[i, j]
+                        f"v{i}",
+                        f"v{j}",
+                        weight=edge_matrix[i, j],
+                        noise_sd=noise_matrix[i, j],
                     )
 
         # Write out optionally
@@ -111,7 +114,7 @@ class RandomDAGGenerator:
             np.save(
                 os.path.join(out_path, f"{dag_name}_noise_matrix.npy"), noise_matrix
             )
-            esm = EdgeStateMatrix([f"{i}" for i in range(num_nodes)])
+            esm = EdgeStateMatrix([f"v{i}" for i in range(num_nodes)])
             for src, dst in G.edges():
                 esm.mark_edge(src, dst, EdgeState.PRESENT)
             GraphRenderer.save_graph(

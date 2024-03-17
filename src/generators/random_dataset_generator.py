@@ -63,7 +63,7 @@ class RandomDatasetGenerator:
                 )
 
         # Convert to dataframe
-        data_df = pd.DataFrame(data, columns=[f"{i}" for i in range(num_vars)])
+        data_df = pd.DataFrame(data, columns=[f"v{i}" for i in range(num_vars)])
 
         # Write out optionally
         dataset_name = f"{dag_name}_dataset_{hashlib.md5(str(datetime.now()).encode()).hexdigest()[:8]}"
