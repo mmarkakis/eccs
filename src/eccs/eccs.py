@@ -7,7 +7,6 @@ from .graph_renderer import GraphRenderer
 from .ate import ATECalculator
 from itertools import combinations
 from tqdm.auto import tqdm
-from stqdm import stqdm
 import multiprocessing
 import numpy as np
 
@@ -482,12 +481,8 @@ class ECCS:
 
         pairs = list(combinations(range(self._num_vars), 2))
 
-        # Iterate over all unordered pairs of variables using stqdm and compute ates
-        for i, j in stqdm(
-            pairs,
-            frontend=True,
-            backend=True,
-        ):
+        # Iterate over all unordered pairs of variables and compute ates
+        for i, j in pairs:
 
             # Extract edge endpoints and if none of the two are in the graph, skip
             e1 = self._data.columns[i]
@@ -570,12 +565,7 @@ class ECCS:
         ]
 
         # Try adding each of the addable
-        for v in stqdm(
-            vars_not_in_adj_set,
-            total=len(vars_not_in_adj_set),
-            frontend=True,
-            backend=True,
-        ):
+        for v in vars_not_in_adj_set:
             edits = [
                 (v, self.treatment, EdgeChange.ADD),
                 (v, self.outcome, EdgeChange.ADD),
@@ -584,12 +574,7 @@ class ECCS:
             maybe_update_best(ate, edits)
 
         # Try removing each of the removable
-        for v in stqdm(
-            base_adj_set,
-            total=len(base_adj_set),
-            frontend=True,
-            backend=True,
-        ):
+        for v in base_adj_set:
             edits = [
                 (self.treatment, v, EdgeChange.ADD),
             ]
