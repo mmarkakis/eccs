@@ -61,6 +61,14 @@ def simulate(
         i,
     ) = args
 
+    exp_prefix = os.path.join(
+        results_path,
+        f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}_{'' if i == None else f'{i}_'}",
+    )
+    f = open(exp_prefix + ".log", "w")
+    sys.stdout = f
+    sys.stderr = f
+
     user = ECCSUser(
         data,
         ground_truth_dag["graph"],
@@ -71,27 +79,22 @@ def simulate(
 
     user.run(num_steps, method)
 
+    f.flush()
+
     np.save(
-        os.path.join(
-            results_path,
-            f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}_{'' if i == None else f'{i}_'}ate_trajectory.npy",
-        ),
+        f"{exp_prefix}ate_trajectory.npy",
         user.ate_trajectory,
     )
     np.save(
-        os.path.join(
-            results_path,
-            f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}_{'' if i == None else f'{i}_'}ate_diff_trajectory.npy",
-        ),
+        f"{exp_prefix}ate_diff_trajectory.npy",
         user.ate_diff_trajectory,
     )
     np.save(
-        os.path.join(
-            results_path,
-            f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}_{'' if i == None else f'{i}_'}edit_distance_trajectory.npy",
-        ),
+        f"{exp_prefix}edit_distance_trajectory.npy",
         user.edit_distance_trajectory,
     )
+
+    f.close()
 
 
 async def main():
@@ -229,7 +232,7 @@ async def main():
                                 eccs_results_path,
                                 dataset_name,
                                 num_steps,
-                                None
+                                None,
                             )
                         )
 
