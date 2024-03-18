@@ -3,6 +3,165 @@ import matplotlib.pyplot as plt
 import yaml
 import os
 import argparse
+from matplotlib.axes import Axes
+
+
+LINE_FORMATTING_DATA = {
+    "Baseline": {
+        "label": "Random Single Edge Change",
+        "color": "#d3d3d3",
+        "marker": "o",
+    },
+    "ECCS Edge": {
+        "label": "ECCS - Single Edge Change",
+        "color": "#7F9FBA",
+        "marker": "o",
+    },
+    "ECCS Adj Set": {
+        "label": "ECCS - Single Adjustment Set Change",
+        "color": "#7FBA82",
+        "marker": "o",
+    },
+}
+
+FONTSIZE = 16
+
+
+def plot_edit_distance(ax: Axes, method: str, points: int, path: str) -> float:
+    """
+    Plots the edit distance for the given method.
+
+    Parameters:
+        ax: The axis to plot on.
+        method: The method to plot.
+        points: The number of points to plot.
+        path: The path to the results.
+
+    Returns:
+        The maximum plotted value.
+    """
+
+    accumulator = None
+    file_count = 0
+
+    for filename in os.listdir(path):
+        if filename.endswith("edit_distance_trajectory.npy"):
+            # Load the list from the file
+            filepath = os.path.join(path, filename)
+            data = np.load(filepath)
+
+            if len(data) < points:
+                data = np.pad(data, (0, points - len(data)), "edge")
+
+            if accumulator is None:
+                accumulator = data
+            else:
+                accumulator += data
+
+            file_count += 1
+
+    if file_count > 0:
+        elementwise_average = accumulator / file_count
+
+    ax.plot(
+        range(len(elementwise_average)),
+        elementwise_average,
+        label=LINE_FORMATTING_DATA[method]["label"],
+        marker=LINE_FORMATTING_DATA[method]["marker"],
+        color=LINE_FORMATTING_DATA[method]["color"],
+    )
+
+    return max(elementwise_average)
+
+
+def plot_ate_diff(ax: Axes, method: str, points: int, path: str) -> float:
+    """
+    Plots the Absolute Relative ATE Error for the given method.
+
+    Parameters:
+        ax: The axis to plot on.
+        method: The method to plot.
+        points: The number of points to plot.
+        path: The path to the results.
+
+    Returns:
+        The maximum plotted value.
+    """
+
+    accumulator = None
+    file_count = 0
+    count_zeros = 0
+
+    for filename in os.listdir(path):
+        if filename.endswith("ate_diff_trajectory.npy"):
+            # Load the list from the file
+            filepath = os.path.join(path, filename)
+            data = np.load(filepath)
+
+            if len(data) < points:
+                data = np.pad(data, (0, points - len(data)), "edge")
+
+            if data[-1] == 0:
+                count_zeros += 1
+
+            # Load the ate data to compute ground truth ATE
+            ate_filepath = filepath.replace("abs_ate_diff", "ate")
+            ate_data = np.load(ate_filepath)
+            if len(ate_data) < points:
+                ate_data = np.pad(ate_data, (0, points - len(ate_data)), "edge")
+
+            ground_truth_ate_guesses = [ate_data[i] - data[i] for i in range(points)]
+
+            ground_truth_ate = 0
+            if all(ground_truth_ate_guesses) == ground_truth_ate_guesses[0]:
+                ground_truth_ate = ground_truth_ate_guesses[0]
+            else: 
+                ground_truth_ate = data[0] - ate_data[0]
+
+            # Compute the absolute relative ATE error
+            data = np.abs(data / ground_truth_ate)
+
+            if accumulator is None:
+                accumulator = data
+            else:
+                accumulator += data
+
+            file_count += 1
+
+    if file_count > 0:
+        elementwise_average = accumulator / file_count
+
+    print(f"File count was {file_count}")
+    print(f"The final ATE difference was 0 for {count_zeros} files")
+
+    ax.plot(
+        range(len(elementwise_average)),
+        elementwise_average,
+        label=LINE_FORMATTING_DATA[method]["label"],
+        marker=LINE_FORMATTING_DATA[method]["marker"],
+        color=LINE_FORMATTING_DATA[method]["color"],
+    )
+
+    return max(elementwise_average)
+
+
+def wrapup_plot(filename: str, ax: Axes, max_val: float) -> None:
+    """
+    Set final formatting for the plot and save it to a file.
+
+    Parameters:
+        filename: The name of the file to save the plot to.
+        ax: The axis to save.
+        maxes: The maximum value of the plotted data.
+    """
+
+    ax.set_ylim(0, 1.1 * max_val)
+    ax.tick_params(axis="both", which="major", labelsize=FONTSIZE)
+    ax.set_xlabel("User Interaction Index", fontsize=FONTSIZE)
+    ax.legend(fontsize=FONTSIZE)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.cla()
 
 
 def main():
@@ -10,138 +169,34 @@ def main():
     parser.add_argument("--path", type=str, required=True, help="Path to the results")
     args = parser.parse_args()
 
-
     # Load the experiment configuration file
-    with open(os.path.join(args.path, 'config.yml'), "r") as f:
+    with open(os.path.join(args.path, "config.yml"), "r") as f:
         config = yaml.safe_load(f)
+    num_points = 1 + max(
+        config["run_baseline"]["num_steps"], config["run_eccs"]["num_steps"]
+    )
     baselines_path = os.path.join(args.path, "baseline_results")
-
+    eccs_path = os.path.join(args.path, "eccs_results")
 
     # Create a directory for the plots
     plots_path = os.path.join(args.path, "plots")
     os.makedirs(plots_path, exist_ok=True)
 
-
     ### Graph edit distance
-    print("Graph edit distance:")
-    accumulator = None
-    file_count = 0
+    print("Plotting graph edit distance...")
+    _, ax = plt.subplots()
+    max1 = plot_edit_distance(ax, "Baseline", num_points, baselines_path)
+    max2 = plot_edit_distance(ax, "ECCS Edge", num_points, eccs_path)
+    ax.set_ylabel("Graph Edit Distance\nfrom Ground Truth", fontsize=FONTSIZE)
+    wrapup_plot(os.path.join(plots_path, "edit_distance.png"), ax, max(max1, max2))
 
-    for filename in os.listdir(baselines_path):
-        if filename.endswith('edit_distance_trajectory.npy'):
-            # Load the list from the file
-            filepath = os.path.join(baselines_path, filename)
-            data = np.load(filepath)
-
-            if accumulator is None:
-                # Initialize the accumulator with the first list
-                accumulator = data
-            else:
-                # Add the current list to the accumulator
-                accumulator += data
-
-            file_count += 1
-
-    if file_count > 0:
-        elementwise_average = accumulator / file_count
-
-    print(file_count)
-    print(elementwise_average)
-
-
-    ### Absolute ATE difference
-    print("Absolute ATE difference:")
-    accumulator = None
-    file_count = 0
-
-    for filename in os.listdir(baselines_path):
-        if filename.endswith('abs_ate_diff_trajectory.npy'):
-            # Load the list from the file
-            filepath = os.path.join(baselines_path, filename)
-            data = np.load(filepath)
-
-            if accumulator is None:
-                # Initialize the accumulator with the first list
-                accumulator = data
-            else:
-                # Add the current list to the accumulator
-                accumulator += data
-
-            file_count += 1
-
-    if file_count > 0:
-        elementwise_average = accumulator / file_count
-
-    print(file_count)
-    print(elementwise_average)
-    
-    return
-
-
-    file_path_best = os.path.join(
-        path,
-        f"{true_graph_name}_{dataset_name}_{starting_graph_name}_best_single_edge_change_{user_interactions}_edit_distance_trajectory.npy",
-    )
-    file_path_random = os.path.join(
-        path,
-        f"{true_graph_name}_{dataset_name}_{starting_graph_name}_random_single_edge_change_{user_interactions}_edit_distance_trajectory.npy",
-    )
-
-    data_best = np.load(file_path_best, allow_pickle=True)
-    data_random = np.load(file_path_random, allow_pickle=True)
-
-    plt.plot(
-        range(len(data_best)), data_best, label="Best", marker="o"
-    )
-    plt.plot(
-        range(len(data_best)),
-        data_random[:len(data_best)],
-        label="Random",
-        marker="o",
-    )
-    plt.xlabel("User Interaction Index")
-    plt.ylabel("Graph Edit Distance from Ground Truth")
-    plt.yticks(range(0, int(max(max(data_best), max(data_random))) + 1))
-    plt.xlim(0, len(data_best))
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(
-        f"{true_graph_name}_{dataset_name}_{starting_graph_name}_{user_interactions}_graph_edit_distance.png"
-    )
-
-    ### Absolute ATE difference
-
-    file_path_best = os.path.join(
-        path,
-        f"{true_graph_name}_{dataset_name}_{starting_graph_name}_best_single_edge_change_{user_interactions}_abs_ate_diff_trajectory.npy",
-    )
-    file_path_random = os.path.join(
-        path,
-        f"{true_graph_name}_{dataset_name}_{starting_graph_name}_random_single_edge_change_{user_interactions}_abs_ate_diff_trajectory.npy",
-    )
-
-    # Load the file
-    data_best = np.load(file_path_best, allow_pickle=True)
-    data_random = np.load(file_path_random, allow_pickle=True)
-
-    plt.cla()
-    plt.plot(
-        range(len(data_best)), data_best, label="Best", marker="o"
-    )
-    plt.plot(
-        range(len(data_best)),
-        data_random[:len(data_best)],
-        label="Random",
-        marker="o",
-    )
-    plt.xlabel("User Interaction Index")
-    plt.ylabel("Absolute ATE Difference")
-    plt.xlim(0, len(data_best))
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(
-        f"{true_graph_name}_{dataset_name}_{starting_graph_name}_{user_interactions}_abs_ate_diff.png"
-    )
+    ### ATE difference
+    print("Plotting ATE difference...")
+    _, ax = plt.subplots()
+    max1 = plot_ate_diff(ax, "Baseline", num_points, baselines_path)
+    max2 = plot_ate_diff(ax, "ECCS Edge", num_points, eccs_path)
+    ax.set_ylabel("Absolute Relative ATE Error", fontsize=FONTSIZE)
+    wrapup_plot(os.path.join(plots_path, "ate_error.png"), ax, max(max1, max2))
 
 
 if __name__ == "__main__":
