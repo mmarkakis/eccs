@@ -20,7 +20,7 @@ class ECCSUser:
         test_graph: str | nx.DiGraph,
         treatment: str,
         outcome: str,
-        verbose: bool = False
+        verbose: bool = False,
     ) -> None:
         """
         Initializes the ECCSUser object.
@@ -61,13 +61,23 @@ class ECCSUser:
         self._edit_disance_trajectory = [self.current_graph_edit_distance]
 
         self._verbose = verbose
+
+        self._printv("Initialized ECCS user!")
+        self._printv(f"True ATE: {self.true_ate}")
+        self._printv(f"Initial ATE: {self.current_ate}")
+        self._printv(f"Initial ATE difference: {self.current_ate_diff}")
+        self._printv(f"Initial edit distance: {self.current_graph_edit_distance}")
+        self._printv(f"An optimal edit path: {self.current_optimal_edit_path}")
+
+    def printv(self, s: str) -> None:
+        """
+        Prints the string if and only if the user is in verbose mode.
+
+        Parameters:
+            s: The string to print.
+        """
         if self._verbose:
-            print("Initialized ECCS user!")
-            print(f"True ATE: {self.true_ate}")
-            print(f"Initial ATE: {self.current_ate}")
-            print(f"Initial ATE difference: {self.current_abs_ate_diff}")
-            print(f"Initial edit distance: {self.current_graph_edit_distance}")
-            print(f"An optimal edit path: {self.current_optimal_edit_path}")
+            print(s)
 
     @property
     def current_has_directed_path(self) -> bool:
@@ -120,17 +130,17 @@ class ECCSUser:
         )["ATE"]
 
     @property
-    def current_abs_ate_diff(self) -> float:
+    def current_ate_diff(self) -> float:
         """
-        Returns the absolute difference between the true ATE and the current ATE.
+        Returns the difference between the current ATE and the true ATE.
 
         Returns:
-            The absolute difference between the true ATE and the current ATE, or
+            The difference between the current ATE and the true ATE, or
             None if either graph does not contain a directed path from the treatment to the outcome.
         """
         if not self.current_has_directed_path or not self.true_has_directed_path:
             return None
-        return abs(self.true_ate - self.current_ate)
+        return self.current_ate - self.true_ate
 
     @property
     def current_graph_edit_distance(self) -> int:
@@ -209,14 +219,14 @@ class ECCSUser:
         return self._ate_trajectory
 
     @property
-    def abs_ate_diff_trajectory(self) -> list[float]:
+    def ate_diff_trajectory(self) -> list[float]:
         """
-        Returns the trajectory of the absolute ATE difference over the invocations.
+        Returns the trajectory of the ATE difference over the invocations.
 
         Returns:
-            The trajectory of the absolute ATE difference over the invocations.
+            The trajectory of the ATE difference over the invocations.
         """
-        return [abs(self.true_ate - ate) for ate in self._ate_trajectory]
+        return [ate - self.true_ate for ate in self._ate_trajectory]
 
     @property
     def edit_distance_trajectory(self) -> list[int]:
@@ -242,68 +252,65 @@ class ECCSUser:
         # Get suggested modifications and seelctively apply them
         edits, ate = self._eccs.suggest(method)
         if len(edits) == 0:
-            if self._verbose:
-                print(f"In iteration {self._invocations + 1} ECCS suggested no changes.")
+
+            self._printv(
+                f"In iteration {self._invocations + 1} ECCS suggested no changes."
+            )
             return False
         for tup in edits.itertuples():
-            if self._verbose:
-                print(
-                    f"In iteration {self._invocations + 1} ECCS suggested: {tup.Change} {tup.Source} -> {tup.Destination}"
-                )
+
+            self._printv(
+                f"In iteration {self._invocations + 1} ECCS suggested: {tup.Change} {tup.Source} -> {tup.Destination}"
+            )
             edge = (tup.Source, tup.Destination)
             if tup.Change == EdgeChange.ADD and edge not in self._eccs.graph.edges():
                 if edge in self._true_graph.edges():
                     self._eccs.add_edge(tup.Source, tup.Destination)
                     self._eccs.fix_edge(tup.Source, tup.Destination)
-                    if self._verbose:
-                        print(
-                            f"\tThis led the user to add and fix the edge {tup.Source} -> {tup.Destination}"
-                        )
+
+                    self._printv(
+                        f"\tThis led the user to add and fix the edge {tup.Source} -> {tup.Destination}"
+                    )
                 else:
                     self._eccs.ban_edge(tup.Source, tup.Destination)
-                    if self._verbose:
-                        print(
-                            f"\tThis led the user to ban the edge {tup.Source} -> {tup.Destination}"
-                        )
+                    self._printv(
+                        f"\tThis led the user to ban the edge {tup.Source} -> {tup.Destination}"
+                    )
             elif tup.Change == EdgeChange.REMOVE and edge in self._eccs.graph.edges():
                 if edge not in self._true_graph.edges():
                     self._eccs.remove_edge(tup.Source, tup.Destination)
                     self._eccs.ban_edge(tup.Source, tup.Destination)
-                    if self._verbose:
-                        print(
-                            f"\tThis led the user to remove and ban the edge {tup.Source} -> {tup.Destination}"
-                        )
+
+                    self._printv(
+                        f"\tThis led the user to remove and ban the edge {tup.Source} -> {tup.Destination}"
+                    )
                 else:
                     self._eccs.fix_edge(tup.Source, tup.Destination)
-                    if self._verbose:
-                        print(
-                            f"\tThis led the user to fix the edge {tup.Source} -> {tup.Destination}"
-                        )
+                    self._printv(
+                        f"\tThis led the user to fix the edge {tup.Source} -> {tup.Destination}"
+                    )
             elif tup.Change == EdgeChange.FLIP and edge in self._eccs.graph.edges():
                 if edge[::-1] in self._true_graph.edges():
                     self._eccs.remove_edge(tup.Source, tup.Destination)
                     self._eccs.add_edge(tup.Destination, tup.Source)
                     self._eccs.fix_edge(tup.Destination, tup.Source)
-                    if self._verbose:
-                        print(
-                            f"\tThis led the user to flip the edge {tup.Source} -> {tup.Destination} and fix the edge {tup.Destination} -> {tup.Source}"
-                        )
+                    self._printv(
+                        f"\tThis led the user to flip the edge {tup.Source} -> {tup.Destination} and fix the edge {tup.Destination} -> {tup.Source}"
+                    )
                 else:
                     self._eccs.ban_edge(tup.Destination, tup.Source)
-                    if self._verbose:
-                        print(
-                            f"\tThis led the user to ban the edge {tup.Destination} -> {tup.Source}"
-                        )
+                    self._printv(
+                        f"\tThis led the user to ban the edge {tup.Destination} -> {tup.Source}"
+                    )
 
         # Update bookkeeping
         self._invocations += 1
         self._ate_trajectory.append(self.current_ate)
         self._edit_disance_trajectory.append(self.current_graph_edit_distance)
 
-        if self._verbose:
-            print(f"\tUpdated ATE: {self.current_ate}")
-            print(f"\tUpdated ATE difference: {self.current_abs_ate_diff}")
-            print(f"\tUpdated edit distance: {self.current_graph_edit_distance}")
+        self._printv(f"\tUpdated ATE: {self.current_ate}")
+        self._printv(f"\tUpdated ATE difference: {self.current_ate_diff}")
+        self._printv(f"\tUpdated edit distance: {self.current_graph_edit_distance}")
         return True
 
     def run(self, steps: int, method: str = None) -> None:
@@ -319,6 +326,5 @@ class ECCSUser:
         for _ in range(steps):
             suggested_edits = self.invoke_eccs(method)
             if not suggested_edits:
-                if self._verbose:
-                    print("ECCS suggested no changes. Stopping.")
+                self._printv("ECCS suggested no changes. Stopping.")
                 break

@@ -156,12 +156,12 @@ async def main():
             outcome,
         )
         user.run(num_steps, method)
-        ate_trajectory = user.abs_ate_diff_trajectory
+        ate_trajectory = user.ate_diff_trajectory
         edit_distance_trajectory = user.edit_distance_trajectory
         np.save(
             os.path.join(
                 args.out_path,
-                f"{dataset_name}_{starting_graph_name}_{method}_{num_steps}_abs_ate_diff_trajectory.npy",
+                f"{dataset_name}_{starting_graph_name}_{method}_{num_steps}_ate_diff_trajectory.npy",
             ),
             ate_trajectory,
         )
@@ -178,7 +178,7 @@ async def main():
         num_steps = config["load_eccs"]["num_steps"]
         ate_trajectory = np.load(
             os.path.join(
-                path, f"{dataset_name}_{method}_{num_steps}_abs_ate_diff_trajectory.npy"
+                path, f"{dataset_name}_{method}_{num_steps}_ate_diff_trajectory.npy"
             )
         )
         edit_distance_trajectory = np.load(

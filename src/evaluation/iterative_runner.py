@@ -81,9 +81,9 @@ def simulate(
     np.save(
         os.path.join(
             results_path,
-            f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}_{'' if i == None else f'{i}_'}abs_ate_diff_trajectory.npy",
+            f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}_{'' if i == None else f'{i}_'}ate_diff_trajectory.npy",
         ),
-        user.abs_ate_diff_trajectory,
+        user.ate_diff_trajectory,
     )
     np.save(
         os.path.join(
