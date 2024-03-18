@@ -136,23 +136,22 @@ async def main():
     else:
         raise ValueError("No starting graph generation or loading parameters specified")
     
-    print("heh")
     if config["exit_after_3"]:
         return
 
     # 4. Run A star once
 
-    print("qwetyurty")
     sys.stdout.flush()
-    print("?")
     if "run_eccs" in config and config["run_eccs"]["enabled"]:
         print("Preparing to run ECCS algorithm part")
         treatment = config["run_eccs"]["treatment"]
         outcome = config["run_eccs"]["outcome"]
         # num_steps = config["run_eccs"]["num_steps"]
         method = config["run_eccs"]["method"]
+
+        dataset_dict["data"].columns = [int(x) for x in dataset_dict["data"].columns]
         a_star = AStarSearch(
-            data=dataset_dict["data"].astype(int),
+            data=dataset_dict["data"],
             init_graph=starting_graph,
             treatment=int(treatment), # we have str rn and it expects num
             outcome=int(outcome)
