@@ -1,9 +1,8 @@
-
-gen_dag: 
+gen_dag:
   ground_truth_dags: 5
   num_nodes: 10
   edge_prob: 0.5
-  edge_weight_range: [-10,10]
+  edge_weight_range: [-10, 10]
   edge_noise_sd_range: [0.001, 2]
 
 gen_dataset:
@@ -16,18 +15,10 @@ gen_starting_dag:
   starting_dags: 5
   num_nodes: 10
   edge_prob: 0.5
-  edge_weight_range: [-10,10]
+  edge_weight_range: [-10, 10]
   edge_noise_sd_range: [0.001, 2]
 
 run_eccs:
   num_steps: 10
-  method: 'best_single_edge_change'
-
-run_baseline:
-  num_steps: 10
-  num_tries: 5
-
-
-
-
-
+  num_tries_for_random_method: 5
+  methods: ["best_single_edge_change", "best_single_adjustment_set_change", "random_single_edge_change"]

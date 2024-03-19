@@ -11,23 +11,29 @@ LINE_FORMATTING_DATA = {
         "label": "Random Single Edge Change",
         "color": "#d3d3d3",
         "marker": "o",
+        "path": "random_single_edge_change",
     },
     "ECCS Edge": {
         "label": "ECCS - Single Edge Change",
         "color": "#7F9FBA",
         "marker": "o",
+        "path": "best_single_edge_change",
     },
     "ECCS Adj Set": {
         "label": "ECCS - Single Adjustment Set Change",
         "color": "#7FBA82",
         "marker": "o",
+        "path": "best_single_adjustment_set_change",
     },
 }
 
 FONTSIZE = 16
 
+min_ground_truth_ate = np.inf
+max_ground_truth_ate = -np.inf
 
-def plot_edit_distance(ax: Axes, method: str, points: int, path: str) -> float:
+
+def plot_edit_distance(ax: Axes, method: str, points: int, base_path: str) -> float:
     """
     Plots the edit distance for the given method.
 
@@ -35,7 +41,7 @@ def plot_edit_distance(ax: Axes, method: str, points: int, path: str) -> float:
         ax: The axis to plot on.
         method: The method to plot.
         points: The number of points to plot.
-        path: The path to the results.
+        base_path: The base path to the results.
 
     Returns:
         The maximum plotted value.
@@ -43,6 +49,8 @@ def plot_edit_distance(ax: Axes, method: str, points: int, path: str) -> float:
 
     accumulator = None
     file_count = 0
+
+    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"])
 
     for filename in os.listdir(path):
         if filename.endswith("edit_distance_trajectory.npy"):
@@ -74,7 +82,7 @@ def plot_edit_distance(ax: Axes, method: str, points: int, path: str) -> float:
     return max(elementwise_average)
 
 
-def plot_ate_diff(ax: Axes, method: str, points: int, path: str) -> float:
+def plot_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> float:
     """
     Plots the Absolute Relative ATE Error for the given method.
 
@@ -82,7 +90,7 @@ def plot_ate_diff(ax: Axes, method: str, points: int, path: str) -> float:
         ax: The axis to plot on.
         method: The method to plot.
         points: The number of points to plot.
-        path: The path to the results.
+        base_path: The base path to the results.
 
     Returns:
         The maximum plotted value.
@@ -92,34 +100,30 @@ def plot_ate_diff(ax: Axes, method: str, points: int, path: str) -> float:
     file_count = 0
     count_zeros = 0
 
+    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"])
+
     for filename in os.listdir(path):
         if filename.endswith("ate_diff_trajectory.npy"):
             # Load the list from the file
             filepath = os.path.join(path, filename)
-            data = np.load(filepath)
+            diff_data = np.load(filepath)
 
-            if len(data) < points:
-                data = np.pad(data, (0, points - len(data)), "edge")
+            if len(diff_data) < points:
+                diff_data = np.pad(diff_data, (0, points - len(diff_data)), "edge")
 
-            if data[-1] == 0:
+            if diff_data[-1] == 0:
                 count_zeros += 1
 
             # Load the ate data to compute ground truth ATE
-            ate_filepath = filepath.replace("abs_ate_diff", "ate")
+            ate_filepath = filepath.replace("ate_diff", "ate")
             ate_data = np.load(ate_filepath)
             if len(ate_data) < points:
                 ate_data = np.pad(ate_data, (0, points - len(ate_data)), "edge")
 
-            ground_truth_ate_guesses = [ate_data[i] - data[i] for i in range(points)]
-
-            ground_truth_ate = 0
-            if all(ground_truth_ate_guesses) == ground_truth_ate_guesses[0]:
-                ground_truth_ate = ground_truth_ate_guesses[0]
-            else: 
-                ground_truth_ate = data[0] - ate_data[0]
+            ground_truth_ate = ate_data[0] - diff_data[0]
 
             # Compute the absolute relative ATE error
-            data = np.abs(data / ground_truth_ate)
+            data = np.abs(diff_data / ground_truth_ate)
 
             if accumulator is None:
                 accumulator = data
@@ -172,11 +176,7 @@ def main():
     # Load the experiment configuration file
     with open(os.path.join(args.path, "config.yml"), "r") as f:
         config = yaml.safe_load(f)
-    num_points = 1 + max(
-        config["run_baseline"]["num_steps"], config["run_eccs"]["num_steps"]
-    )
-    baselines_path = os.path.join(args.path, "baseline_results")
-    eccs_path = os.path.join(args.path, "eccs_results")
+    num_points = 1 + config["run_eccs"]["num_steps"]
 
     # Create a directory for the plots
     plots_path = os.path.join(args.path, "plots")
@@ -185,18 +185,22 @@ def main():
     ### Graph edit distance
     print("Plotting graph edit distance...")
     _, ax = plt.subplots()
-    max1 = plot_edit_distance(ax, "Baseline", num_points, baselines_path)
-    max2 = plot_edit_distance(ax, "ECCS Edge", num_points, eccs_path)
+    max1 = plot_edit_distance(ax, "Baseline", num_points, args.path)
+    max2 = plot_edit_distance(ax, "ECCS Edge", num_points, args.path)
+    max3 = plot_edit_distance(ax, "ECCS Adj Set", num_points, args.path)
     ax.set_ylabel("Graph Edit Distance\nfrom Ground Truth", fontsize=FONTSIZE)
-    wrapup_plot(os.path.join(plots_path, "edit_distance.png"), ax, max(max1, max2))
+    wrapup_plot(
+        os.path.join(plots_path, "edit_distance.png"), ax, max(max1, max2, max3)
+    )
 
     ### ATE difference
     print("Plotting ATE difference...")
     _, ax = plt.subplots()
-    max1 = plot_ate_diff(ax, "Baseline", num_points, baselines_path)
-    max2 = plot_ate_diff(ax, "ECCS Edge", num_points, eccs_path)
+    max1 = plot_ate_diff(ax, "Baseline", num_points, args.path)
+    max2 = plot_ate_diff(ax, "ECCS Edge", num_points, args.path)
+    max3 = plot_ate_diff(ax, "ECCS Adj Set", num_points, args.path)
     ax.set_ylabel("Absolute Relative ATE Error", fontsize=FONTSIZE)
-    wrapup_plot(os.path.join(plots_path, "ate_error.png"), ax, max(max1, max2))
+    wrapup_plot(os.path.join(plots_path, "ate_error.png"), ax, max(max1, max2, max3))
 
 
 if __name__ == "__main__":

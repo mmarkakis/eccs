@@ -179,12 +179,14 @@ async def main():
     # 4. Run the methods and store results
     print("-----------------")
     print(f"{datetime.now()} Phase 4: Starting experiment")
-    eccs_results_path = os.path.join(work_path, "eccs_results")
-    baseline_results_path = os.path.join(work_path, "baseline_results")
-    os.makedirs(eccs_results_path, exist_ok=True)
-    os.makedirs(baseline_results_path, exist_ok=True)
     num_steps = config["run_eccs"]["num_steps"]
-    method = config["run_eccs"]["method"]
+    methods = config["run_eccs"]["methods"]
+    for method in methods:
+        os.makedirs(os.path.join(work_path, method), exist_ok=True)
+    num_random_tries = config["run_eccs"]["num_tries_for_random_method"]
+    num_tasks = len(methods) + (
+        (num_random_tries - 1) if "random_single_edge_change" in methods else 0
+    )
 
     tasks = []
     pbar = tqdm(
@@ -194,7 +196,7 @@ async def main():
         * int(
             config["gen_dag"]["num_nodes"] * (config["gen_dag"]["num_nodes"] - 1) / 2
         )  # Choices of treatment / outcome
-        * (1 + config["run_baseline"]["num_tries"])
+        * num_tasks
     )
     # For each ground truth dag...
     for ground_truth_dag_name, datasets in dataset_names.items():
@@ -217,40 +219,42 @@ async def main():
                         if not nx.has_path(
                             ground_truth_dag["graph"], treatment, outcome
                         ) or not nx.has_path(starting_dag["graph"], treatment, outcome):
-                            pbar.update(1 + config["run_baseline"]["num_tries"])
+                            pbar.update(num_tasks)
                             continue
 
                         # Run ECCS
-                        tasks.append(
-                            (
-                                data,
-                                ground_truth_dag,
-                                starting_dag,
-                                treatment,
-                                outcome,
-                                method,
-                                eccs_results_path,
-                                dataset_name,
-                                num_steps,
-                                None,
-                            )
-                        )
-
-                        for i in range(config["run_baseline"]["num_tries"]):
-                            tasks.append(
-                                (
-                                    data,
-                                    ground_truth_dag,
-                                    starting_dag,
-                                    treatment,
-                                    outcome,
-                                    "random_single_edge_change",
-                                    baseline_results_path,
-                                    dataset_name,
-                                    num_steps,
-                                    i,
+                        for method in methods:
+                            if method == "random_single_edge_change":
+                                for i in range(num_random_tries):
+                                    tasks.append(
+                                        (
+                                            data,
+                                            ground_truth_dag,
+                                            starting_dag,
+                                            treatment,
+                                            outcome,
+                                            method,
+                                            os.path.join(work_path, method),
+                                            dataset_name,
+                                            num_steps,
+                                            i,
+                                        )
+                                    )
+                            else:
+                                tasks.append(
+                                    (
+                                        data,
+                                        ground_truth_dag,
+                                        starting_dag,
+                                        treatment,
+                                        outcome,
+                                        method,
+                                        os.path.join(work_path, method),
+                                        dataset_name,
+                                        num_steps,
+                                        None,
+                                    )
                                 )
-                            )
 
     with ProcessPoolExecutor() as executor:
         # Submit all tasks to the executor
