@@ -33,3 +33,30 @@
 2024-03-15 01:51:44.121593 Running pc with kci
 2024-03-15 01:52:39.143451 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x7e3db13880e0>: too many values to unpack (expected 2)
 2024-03-15 01:52:39.144129 Done running pc with kci. Took 55.000 seconds
+2024-03-15 17:46:33.274901 Running pc with kci
+2024-03-15 17:46:42.277708 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x2ac6c9e50>: too many values to unpack (expected 2)
+2024-03-15 17:46:42.277835 Done running pc with kci. Took 9.000 seconds
+2024-03-15 17:51:49.850663 Running pc with kci
+2024-03-15 17:51:59.334392 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x15fb13f70>: too many values to unpack (expected 2)
+2024-03-15 17:51:59.334560 Done running pc with kci. Took 9.000 seconds
+2024-03-15 17:52:17.531280 Running pc with kci
+2024-03-15 17:52:26.551557 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x29c251f70>: too many values to unpack (expected 2)
+2024-03-15 17:52:26.551743 Done running pc with kci. Took 9.000 seconds
+2024-03-15 17:53:08.239738 Running pc with kci
+2024-03-15 17:53:18.235010 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x299493f70>: too many values to unpack (expected 2)
+2024-03-15 17:53:18.235197 Done running pc with kci. Took 9.000 seconds
+2024-03-15 17:53:49.117685 Running pc with kci
+2024-03-15 17:53:58.260724 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x16d926f70>: too many values to unpack (expected 2)
+2024-03-15 17:53:58.260902 Done running pc with kci. Took 9.000 seconds
+2024-03-15 17:54:30.078077 Running pc with kci
+2024-03-15 17:54:39.828785 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x2a3ca6f70>: too many values to unpack (expected 2)
+2024-03-15 17:54:39.828977 Done running pc with kci. Took 9.000 seconds
+2024-03-15 17:55:24.142238 Running pc with kci
+2024-03-15 17:55:33.387912 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x2a58e7f70>: too many values to unpack (expected 2)
+2024-03-15 17:55:33.388110 Done running pc with kci. Took 9.000 seconds
+2024-03-15 17:56:26.511654 Running pc with kci
+2024-03-15 17:56:36.784447 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x2a1b66f70>: too many values to unpack (expected 2)
+2024-03-15 17:56:36.784778 Done running pc with kci. Took 10.000 seconds
+2024-03-15 17:57:32.928722 Running pc with kci
+2024-03-15 17:57:42.057561 Error running <function CausalDiscovery.run_with_timer.<locals>.run_pc at 0x2a3051040>: too many values to unpack (expected 2)
+2024-03-15 17:57:42.057755 Done running pc with kci. Took 9.000 seconds

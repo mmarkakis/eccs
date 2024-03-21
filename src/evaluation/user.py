@@ -1,3 +1,4 @@
+from __future__ import annotations
 import networkx as nx
 from ..eccs.eccs import ECCS, EdgeChange
 from ..eccs.ate import ATECalculator

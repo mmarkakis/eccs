@@ -1,10 +1,13 @@
-from typing import Optional, Tuple
+from __future__ import annotations
+from typing import Any, List, Optional, Tuple
 import pandas as pd
 import networkx as nx
 from networkx.algorithms.d_separation import minimal_d_separator
+from .ate import ATECalculator
 from .edge_state_matrix import EdgeState, EdgeStateMatrix
 from .graph_renderer import GraphRenderer
-from .ate import ATECalculator
+from .heuristic_search import AStarSearch
+
 from itertools import combinations
 from tqdm.auto import tqdm
 import multiprocessing
@@ -384,6 +387,8 @@ class ECCS:
             return self._suggest_best_single_adjustment_set_addition()
         elif method == "random_single_edge_change":
             return self._suggest_random_single_edge_change()
+        elif method == "Best Edge Changes Suggested by A*":
+            return self._suggest_best_single_edge_change_heuristic()
 
     def _edit_and_get_ate(self, edits: list[tuple[str, str, str]]) -> Optional[float]:
         """
@@ -523,6 +528,19 @@ class ECCS:
                     maybe_update_best(ate, [(e2, e1, EdgeChange.FLIP)])
 
         return (best_edits, furthest_ate)
+    
+    def _suggest_best_single_edge_change_heuristic(
+        self,
+    ) -> List[Any]:
+        """
+        Suggest the best single edge change based on A star
+
+        Returns:
+            A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
+        """
+        a_star = AStarSearch(self._graph, self._treatment_idx, self._outcome_idx. self._data)
+        return a_star.astar()
+        
 
     def _suggest_best_single_adjustment_set_change(
         self,

@@ -2,6 +2,7 @@
 **pycache**/
 
 datasets/*/*.csv
+.DS_Store
 
 evaluation/**/*
 

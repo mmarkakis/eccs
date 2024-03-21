@@ -9,7 +9,7 @@ gen_dag:
 load_dag:
   enabled: True
   path: '../../datasets/evaluation'
-  dag_name: 'dag_b90ba55a'
+  dag_name: 'dag_b9ea0d1d'
 
 exit_after_1: False
 
@@ -22,7 +22,7 @@ gen_dataset:
 load_dataset:
   enabled: True
   path: '../../datasets/evaluation'
-  dataset_name: 'dag_b90ba55a_dataset_a7918e64'
+  dataset_name: 'dag_b9ea0d1d_dataset_35d898b8'
 
 exit_after_2: False
 
@@ -48,7 +48,7 @@ random_starting_graph:
 load_random_starting_graph:
   enabled: True
   path: '../../datasets/evaluation'
-  dag_name: 'dag_3b51d34e'
+  dag_name: 'dag_b9ea0d1d'
 
 exit_after_3: False
 
