@@ -7,13 +7,17 @@ from typing import List, Optional, Tuple
 from .ate import ATECalculator
 
 class AStarSearch:
-    def __init__(self, init_graph, treatment, outcome, data, gamma_1=0.5, gamma_2=0.5, p_value_threshold=0.5, computational_budget=100000):
+    def __init__(self, init_graph, treatment, outcome, data, gamma_1=2, gamma_2=0.5, p_value_threshold=0.5, std_err_threshold=0.01, computational_budget=1000):
         # n is the number of causal variables
         # m is the number of edges in the initial graph
         print("Initializing A star")
         self.m = len(init_graph.edges())
         self.n = len(init_graph.nodes())
         self.init_graph = init_graph
+        print("Initial graph:")
+        print(self.init_graph.edges())
+        print("Treatment: ", treatment)
+        print("Outcome: ", outcome)
         for n in self.init_graph.nodes: # This is some hacky code to make it work with graph hashing
             self.init_graph.nodes[n]['label'] = self.init_graph.nodes[n]['var_name']
         self.treatment = treatment
@@ -22,6 +26,7 @@ class AStarSearch:
         self.gamma_1 = gamma_1
         self.gamma_2 = gamma_2
         self.p_value_threshold = p_value_threshold
+        self.std_err_threshold = std_err_threshold
 
         # graph id -> (pred graph id, (start causal variable, end causal variable, boolean addition or deletion))
         # TODO: make this code look nicer with edge types (low priority)
@@ -33,6 +38,9 @@ class AStarSearch:
         self._id_to_graph = {}
         self._cur_next_id = 0
         self._computational_budget = computational_budget
+        self._f_score = {}
+        self._g_score = {}
+        self._lookahead_threshold = 3
 
         init_ATE_info = self._get_ATE_info(0, init_graph)
         assert 0 in self._ATE_cache
@@ -59,7 +67,7 @@ class AStarSearch:
                 # Special case of treatment and outcome being not connected
                 ate = {
                     "ATE": 0,
-                    "P-value": 1,
+                    "P-value": 0,
                     "Standard Error": 0
                 }
                 self._ATE_cache[id] = ate
@@ -76,9 +84,19 @@ class AStarSearch:
         # TODO: what is the type of Estimand
         # TODO: implement caching for ATE information
         ATE_info = self._get_ATE_info(id, graph)
-        return ATE_info["ATE"] - self.gamma_1 * ATE_info["Standard Error"] + ATE_info["P-value"] + abs(len(graph.edges()) - self.m)
+        # The math.inf stops graphs where treatment and outcome are not direct connected
+        stderr = 0
+        if ATE_info["Standard Error"] == 0:
+            stderr = 1
+        else:
+            try:
+                stderr = ATE_info["Standard Error"][0]
+            except IndexError:
+                stderr = ATE_info["Standard Error"]
 
-    def _explore_neighbor(self, graph: nx.DiGraph, n1: int, n2: int, is_add: bool) -> Optional[int]:
+        return ATE_info["ATE"] - self.gamma_1 * stderr + ATE_info["P-value"] + 0.01 * abs(len(graph.edges()) - self.m)
+
+    def _explore_neighbor(self, current_node_id: int, graph: nx.DiGraph, n1: int, n2: int, frontier, n_lookahead: int, is_add: bool) -> Optional[int]:
         # the type of nx node is int unless DiGraph.nodes() was called with data options
         # returns the id of the new neighbor or None if we don't explore
         
@@ -97,8 +115,21 @@ class AStarSearch:
 
         id = self._hashtag_to_id[hashtag]
         ATE_info = self._get_ATE_info(id, graph)
-        if ATE_info["P-value"] < self.p_value_threshold:
+
+        # if ATE_info["P-value"] < self.p_value_threshold:
+        if ATE_info["Standard Error"] > self.std_err_threshold:
             self._visited.add(id) # discard
+            if id not in self._id_to_graph:
+                new_graph = graph.copy()
+                self._id_to_graph[id] = new_graph
+            if n_lookahead < self._lookahead_threshold:
+                f_score = self._f_score.get(id,
+                    self._g_score[current_node_id] - self._get_potential(id, graph))
+                if id not in self._f_score:
+                    self._f_score[id] = f_score
+                if id not in self._g_score:
+                    self._g_score[id] = self._g_score[current_node_id]
+                heapq.heappush(frontier, (f_score, id, n_lookahead + 1))
 
         result = None
         if id not in self._visited:
@@ -115,7 +146,7 @@ class AStarSearch:
             graph.add_edge(n1, n2)
         return (result, (n1, n2, is_add))
     
-    def _get_neighbors(self, current_node_id: int) -> List[Tuple[int, Tuple[int, int, bool]]]:
+    def _get_neighbors(self, current_node_id: int, frontier, n_lookahead: int) -> List[Tuple[int, Tuple[int, int, bool]]]:
         # Returns list of neighbors
         graph: nx.DiGraph = self._id_to_graph[current_node_id]
         results = []
@@ -125,11 +156,11 @@ class AStarSearch:
                     continue # skip self-loops
                 neighbor_res = None
                 if graph.has_edge(n1, n2):
-                    neighbor_res = self._explore_neighbor(graph, n1, n2, is_add=False)
+                    neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=False)
                 elif n2 in nx.ancestors(graph, n1):
                     continue # Adding this edge his creates a cycle
                 else:
-                    neighbor_res = self._explore_neighbor(graph, n1, n2, is_add=True)
+                    neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=True)
                 if neighbor_res[0] is not None:
                     results.append(neighbor_res)
         
@@ -149,7 +180,7 @@ class AStarSearch:
     def astar(self, k=100):
         # Side effect: prints the top 10 result
         # Returns the most frequently seen edge flips in sorted order
-        frontier = [(0, self._cur_next_id)] # this is the pq (f(v), v), only store the ID
+        frontier = [(0, self._cur_next_id, 0)] # this is the pq (f(v), v), only store the ID
         self._cur_next_id += 1
 
         start_hash = dihash.hash_graph(
@@ -160,59 +191,52 @@ class AStarSearch:
         self._visited.add(0) # store actual graph here
         self._hashtag_to_id[start_hash] = 0
         self._id_to_graph[0] = self.init_graph
-        g_score = {}
         # starting node always has id 0
-        f_score = {}
-        f_score[0] =  - self._get_potential(0, self.init_graph)
+        self._f_score[0] =  - self._get_potential(0, self.init_graph)
         # g_score[0] = self._init_potential + f_score[0]
-        g_score[0] = f_score[0]
+        self._g_score[0] = self._f_score[0]
 
         top_k_candidates = []
 
         while frontier:
-            #print("Starting a loop")
-            _, current_node_id = heapq.heappop(frontier)
+            _, current_node_id, n_lookahead = heapq.heappop(frontier)
             self._visited.add(current_node_id)
             heapq.heappush(top_k_candidates, (self._get_potential(current_node_id, self._id_to_graph[current_node_id]), current_node_id))
             if len(top_k_candidates) > k:
                 heapq.heappop(top_k_candidates)
-            neighbors = self._get_neighbors(current_node_id)
-            #print(neighbors)
+            neighbors = self._get_neighbors(current_node_id, frontier, n_lookahead)
+            if self._cur_next_id > self._computational_budget:
+                break
             for neighbor_id, edge_type in neighbors:
                 # when expanding neighbors, just discard ones that are too low p-value
-                # tentative_g_score = g_score[current_node_id] + self._init_potential - self._get_potential(current_node_id, self._id_to_graph[current_node_id])
-                tentative_g_score = g_score[current_node_id]
-                neighbor_g_score = g_score.get(neighbor_id, self._init_potential - self._get_potential(neighbor_id, self._id_to_graph[neighbor_id]))
-                #print(tentative_g_score)
-                #print(neighbor_g_score)
-                # print(self._ATE_cache[neighbor_id]["ATE"])
-                # g_score[neighbor_id] = neighbor_g_score # g(n) in f(n) = g(n) + h(n)
+                tentative_g_score = self._g_score[current_node_id]
+                neighbor_g_score = self._g_score.get(neighbor_id, self._init_potential - self._get_potential(neighbor_id, self._id_to_graph[neighbor_id]))
                 if tentative_g_score <= neighbor_g_score:
                     self._predecessors[neighbor_id] = (current_node_id, edge_type)
-                    g_score[neighbor_id] = tentative_g_score
+                    self._g_score[neighbor_id] = tentative_g_score
                     # f_score[neighbor_id] = tentative_g_score + self.heuristic(neighbor)
-                    f_score[neighbor_id] = tentative_g_score - self._get_potential(neighbor_id, self._id_to_graph[neighbor_id])
-                    heapq.heappush(frontier, (f_score[neighbor_id], neighbor_id))
+                    self._f_score[neighbor_id] = tentative_g_score - self._get_potential(neighbor_id, self._id_to_graph[neighbor_id])
+                    heapq.heappush(frontier, (self._f_score[neighbor_id], neighbor_id, 0))
 
                 if self._cur_next_id > self._computational_budget:
                     break
         
         edge_tally = {}
+        
         for p in top_k_candidates:
-            c_id = p[0]
+            c_id = p[1]
+            initial_c_id = p[1]
             while c_id in self._predecessors:
                 c_id, (n1, n2, _) = self._predecessors[c_id]
                 if (n1, n2) not in edge_tally:
-                    edge_tally[(n1, n2)] = (1, abs(self._ATE_cache[c_id]["ATE"] - self.ATE_init))
+                    edge_tally[(n1, n2)] = (1, abs(self._ATE_cache[initial_c_id]["ATE"] - self.ATE_init))
                 else:
                     cnt = edge_tally[(n1, n2)][0] + 1
-                    total_diff = edge_tally[(n1, n2)][1] + abs(self._ATE_cache[c_id]["ATE"] - self.ATE_init)
+                    total_diff = edge_tally[(n1, n2)][1] + abs(self._ATE_cache[initial_c_id]["ATE"] - self.ATE_init)
                     edge_tally[(n1, n2)] = (cnt, total_diff)
-                # current_node = self._predecessors[current_node]
-        print(top_k_candidates)
-        print("printing edge tally")
-        print(edge_tally)
+        
         sorted_edges = sorted(edge_tally.items(), key=lambda x:x[1][0], reverse=True)
+        print("The top 10 edges are")
         print(sorted_edges[:10])
 
-        return sorted_edges
+        return sorted_edges#

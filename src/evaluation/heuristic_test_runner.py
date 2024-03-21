@@ -7,7 +7,6 @@ from src.eccs.heuristic_search import AStarSearch
 from src.generators.random_dag_generator import RandomDAGGenerator
 from src.generators.random_dataset_generator import RandomDatasetGenerator
 from src.evaluation.causal_discovery import CausalDiscovery
-from src.evaluation.user import ECCSUser
 import networkx as nx
 import os
 import numpy as np
@@ -149,7 +148,7 @@ async def main():
         # num_steps = config["run_eccs"]["num_steps"]
         method = config["run_eccs"]["method"]
 
-        dataset_dict["data"].columns = [int(x) for x in dataset_dict["data"].columns]
+        dataset_dict["data"].columns = [x for x in dataset_dict["data"].columns]
         a_star = AStarSearch(
             data=dataset_dict["data"],
             init_graph=starting_graph,
