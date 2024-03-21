@@ -2,12 +2,14 @@ import dihash
 import heapq
 import math
 import networkx as nx
-from typing import List, Optional, Tuple
+import pandas as pd
+from typing import Any, List, Optional, Tuple
 
 from .ate import ATECalculator
+from .edge_state_matrix import EdgeState, EdgeStateMatrix
 
 class AStarSearch:
-    def __init__(self, init_graph, treatment, outcome, data, gamma_1=2, gamma_2=0.5, p_value_threshold=0.5, std_err_threshold=0.01, computational_budget=1000):
+    def __init__(self, init_graph: nx.DiGraph, treatment: int, outcome: int, data: pd.DataFrame, edge_states: Optional[EdgeStateMatrix]=None, gamma_1: float=2, gamma_2: float=0.5, p_value_threshold: float=0.5, std_err_threshold: float=0.01, computational_budget: int=1000):
         # n is the number of causal variables
         # m is the number of edges in the initial graph
         print("Initializing A star")
@@ -27,6 +29,10 @@ class AStarSearch:
         self.gamma_2 = gamma_2
         self.p_value_threshold = p_value_threshold
         self.std_err_threshold = std_err_threshold
+        if edge_states is None: # backwards compatibility
+            self.edge_states = EdgeStateMatrix([f'{i}' for i in range(self.n)])
+        else:
+            self.edge_states = edge_states
 
         # graph id -> (pred graph id, (start causal variable, end causal variable, boolean addition or deletion))
         # TODO: make this code look nicer with edge types (low priority)
@@ -94,12 +100,17 @@ class AStarSearch:
             except IndexError:
                 stderr = ATE_info["Standard Error"]
 
-        return ATE_info["ATE"] - self.gamma_1 * stderr + ATE_info["P-value"] + 0.01 * abs(len(graph.edges()) - self.m)
+        return ATE_info["ATE"] - self.gamma_1 * stderr + ATE_info["P-value"] + 0.01 * abs(len(graph.edges()) - self.m * 2) # TODO: 2 is a guess of average degree
 
-    def _explore_neighbor(self, current_node_id: int, graph: nx.DiGraph, n1: int, n2: int, frontier, n_lookahead: int, is_add: bool) -> Optional[int]:
+    def _explore_neighbor(self, current_node_id: int, graph: nx.DiGraph, n1: int, n2: int, frontier: List[Any], n_lookahead: int, is_add: bool) -> Optional[int]:
         # the type of nx node is int unless DiGraph.nodes() was called with data options
         # returns the id of the new neighbor or None if we don't explore
         
+        if not is_add and len(graph.edges()) <= self.n: # Only explore completely connected graphs
+            return (None, None)
+        if is_add and len(graph.edges()) >= self.n * self.n // 2: # Skip overly connected graphs too
+            return (None, None)
+
         if is_add:
             graph.add_edge(n1, n2)
         else:
@@ -146,7 +157,7 @@ class AStarSearch:
             graph.add_edge(n1, n2)
         return (result, (n1, n2, is_add))
     
-    def _get_neighbors(self, current_node_id: int, frontier, n_lookahead: int) -> List[Tuple[int, Tuple[int, int, bool]]]:
+    def _get_neighbors(self, current_node_id: int, frontier: List[Any], n_lookahead: int) -> List[Tuple[int, Tuple[int, int, bool]]]:
         # Returns list of neighbors
         graph: nx.DiGraph = self._id_to_graph[current_node_id]
         results = []
@@ -155,11 +166,11 @@ class AStarSearch:
                 if n2 == n1:
                     continue # skip self-loops
                 neighbor_res = None
-                if graph.has_edge(n1, n2):
+                if graph.has_edge(n1, n2) and not self.edge_states.is_edge_fixed(n1, n2):
                     neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=False)
                 elif n2 in nx.ancestors(graph, n1):
                     continue # Adding this edge his creates a cycle
-                else:
+                elif not self.edge_states.is_edge_banned(n1, n2):
                     neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=True)
                 if neighbor_res[0] is not None:
                     results.append(neighbor_res)
@@ -177,7 +188,7 @@ class AStarSearch:
         # g(n) = Phi(init) - Phi(current frontier of the path)
         return self._init_potential - self._get_potential(predecessor) - self._get_potential(node)
 
-    def astar(self, k=100):
+    def astar(self, k: int=100):
         # Side effect: prints the top 10 result
         # Returns the most frequently seen edge flips in sorted order
         frontier = [(0, self._cur_next_id, 0)] # this is the pq (f(v), v), only store the ID
