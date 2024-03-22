@@ -32,6 +32,7 @@ class ECCS:
     EDGE_SUGGESTION_METHODS = [
         "best_single_edge_change",
         "best_single_adjustment_set_change",
+        "astar_single_edge_change",
         "random_single_edge_change",
     ]
 
@@ -387,7 +388,7 @@ class ECCS:
             return self._suggest_best_single_adjustment_set_addition()
         elif method == "random_single_edge_change":
             return self._suggest_random_single_edge_change()
-        elif method == "Best Edge Changes Suggested by A*":
+        elif method == "astar_single_edge_change":
             return self._suggest_best_single_edge_change_heuristic()
 
     def _edit_and_get_ate(self, edits: list[tuple[str, str, str]]) -> Optional[float]:
