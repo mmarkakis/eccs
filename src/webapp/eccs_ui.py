@@ -317,6 +317,7 @@ class ECCSUI:
 
             if submitted:
                 with st.spinner("Calculating..."):
+                    ## TODO: reconcile the values returned by suggest
                     ate, graph, modifications = self.eccs.suggest(method=eccs_method)
                     st.session_state["future_ate"] = ate
                     st.session_state["future_graph"] = graph

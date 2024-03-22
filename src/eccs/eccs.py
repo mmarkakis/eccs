@@ -5,6 +5,7 @@ import networkx as nx
 from networkx.algorithms.d_separation import minimal_d_separator
 from .ate import ATECalculator
 from .edge_state_matrix import EdgeState, EdgeStateMatrix
+from .edits import EdgeEditType, EdgeEdit
 from .graph_renderer import GraphRenderer
 from .heuristic_search import AStarSearch
 
@@ -12,16 +13,6 @@ from itertools import combinations
 from tqdm.auto import tqdm
 import multiprocessing
 import numpy as np
-
-
-class EdgeChange:
-    """
-    Class to represent possible changes to a directed edge.
-    """
-
-    ADD: str = "Add"
-    REMOVE: str = "Remove"
-    FLIP: str = "Flip"
 
 
 class ECCS:
@@ -363,7 +354,7 @@ class ECCS:
             self.data, treatment=treatment, outcome=outcome, graph=graph
         )["ATE"]
 
-    def suggest(self, method: str) -> tuple[pd.DataFrame, float]:
+    def suggest(self, method: str) -> tuple[list[EdgeEdit], float]:
         """
         Suggest a modification to the graph that yields a maximally different ATE,
         compared to the current ATE. The modification should not edit edges that are
@@ -373,7 +364,7 @@ class ECCS:
             method: The method to use for suggestion. Must be in ECCS.EDGE_SUGGESTION_METHODS.
 
         Returns:
-          A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
+          A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
 
         Raises:
             ValueError: If `method` is not in ECCS.EDGE_SUGGESTION_METHODS.
@@ -391,14 +382,13 @@ class ECCS:
         elif method == "astar_single_edge_change":
             return self._suggest_best_single_edge_change_heuristic()
 
-    def _edit_and_get_ate(self, edits: list[tuple[str, str, str]]) -> Optional[float]:
+    def _edit_and_get_ate(self, edits: list[EdgeEdit]) -> Optional[float]:
         """
         Edit a copy of the current self.graph according to `edits` and evaluate the ATE.
         Does not modify self.graph.
 
         Parameters:
-            edits: A list of tuples containing the edits to be made to the graph. Each tuple
-                contains the source and destination of the edge and the change type.
+            edits: A list of edits to be made to the graph.
 
         Returns:
             The ATE, or None if the graph is not acceptable.
@@ -407,12 +397,12 @@ class ECCS:
         graph = self._graph.copy()
 
         # Edit graph
-        for src, dst, change_type in edits:
-            if change_type == EdgeChange.ADD:
+        for src, dst, edit_type in edits:
+            if edit_type == EdgeEditType.ADD:
                 graph.add_edge(src, dst)
-            elif change_type == EdgeChange.REMOVE:
+            elif edit_type == EdgeEditType.REMOVE:
                 graph.remove_edge(src, dst)
-            elif change_type == EdgeChange.FLIP:
+            elif edit_type == EdgeEditType.FLIP:
                 graph.remove_edge(src, dst)
                 graph.add_edge(dst, src)
 
@@ -422,12 +412,11 @@ class ECCS:
 
         return None
 
-    def _edit_and_draw(self, edits: list[tuple[str, str, str]]) -> Optional[str]:
+    def _edit_and_draw(self, edits: list[EdgeEdit]) -> Optional[str]:
         """
         Edit a copy of the current self.graph according to `edits` and draw the graph.
         Parameters:
-            edits: A list of tuples containing the edits to be made to the graph. Each tuple
-                contains the source and destination of the edge and the change type.
+            edits: A list of edits to be made to the graph.
 
         Returns:
             A base64-encoded string representation of the graph, or None if the graph is not acceptable.
@@ -437,14 +426,14 @@ class ECCS:
         edge_decisions_matrix = self._edge_decisions_matrix.copy()
 
         # Edit graph
-        for src, dst, change_type in edits:
-            if change_type == EdgeChange.ADD:
+        for src, dst, edit_type in edits:
+            if edit_type == EdgeEditType.ADD:
                 graph.add_edge(src, dst)
                 edge_decisions_matrix.mark_edge(src, dst, EdgeState.SUGGESTED)
-            elif change_type == EdgeChange.REMOVE:
+            elif edit_type == EdgeEditType.REMOVE:
                 graph.remove_edge(src, dst)
                 edge_decisions_matrix.mark_edge(src, dst, EdgeState.ABSENT)
-            elif change_type == EdgeChange.FLIP:
+            elif edit_type == EdgeEditType.FLIP:
                 graph.remove_edge(src, dst)
                 edge_decisions_matrix.mark_edge(src, dst, EdgeState.ABSENT)
                 graph.add_edge(dst, src)
@@ -458,17 +447,17 @@ class ECCS:
 
     def _suggest_best_single_edge_change(
         self,
-    ) -> Tuple[pd.DataFrame, float]:
+    ) -> Tuple[list[EdgeEdit], float]:
         """
         Suggest the best_single_edge_change that maximally changes the ATE.
 
         Returns:
-            A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
+            A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
         base_ate = self.get_ate()
         furthest_ate = self.get_ate()
         best_ate_diff = 0
-        best_edits = pd.DataFrame(columns=["Source", "Destination", "Change"])
+        best_edits = []
 
         def maybe_update_best(ate, edits):
             nonlocal best_ate_diff
@@ -481,9 +470,7 @@ class ECCS:
             if ate_diff > best_ate_diff:
                 best_ate_diff = ate_diff
                 furthest_ate = ate
-                best_edits = pd.DataFrame(
-                    edits, columns=["Source", "Destination", "Change"]
-                )
+                best_edits = edits
 
         pairs = list(combinations(range(self._num_vars), 2))
 
@@ -503,61 +490,62 @@ class ECCS:
                 r_state == EdgeState.ABSENT or r_state == EdgeState.BANNED
             ):
                 # Try adding in the "forward" direction
-                ate = self._edit_and_get_ate([(e1, e2, EdgeChange.ADD)])
-                maybe_update_best(ate, [(e1, e2, EdgeChange.ADD)])
+                ate = self._edit_and_get_ate([EdgeEdit(e1, e2, EdgeEditType.ADD)])
+                maybe_update_best(ate, [EdgeEdit(e1, e2, EdgeEditType.ADD)])
             if r_state == EdgeState.ABSENT and (
                 f_state == EdgeState.ABSENT or f_state == EdgeState.BANNED
             ):
                 # Try adding in the "reverse" direction
-                ate = self._edit_and_get_ate([(e2, e1, EdgeChange.ADD)])
-                maybe_update_best(ate, [(e2, e1, EdgeChange.ADD)])
+                ate = self._edit_and_get_ate([EdgeEdit(e2, e1, EdgeEditType.ADD)])
+                maybe_update_best(ate, [EdgeEdit(e2, e1, EdgeEditType.ADD)])
             if f_state == EdgeState.PRESENT:
                 # Try removing the edge
-                ate = self._edit_and_get_ate([(e1, e2, EdgeChange.REMOVE)])
-                maybe_update_best(ate, [(e1, e2, EdgeChange.REMOVE)])
+                ate = self._edit_and_get_ate([EdgeEdit(e1, e2, EdgeEditType.REMOVE)])
+                maybe_update_best(ate, [EdgeEdit(e1, e2, EdgeEditType.REMOVE)])
                 if r_state == EdgeState.ABSENT:  # As opposed to banned
                     # Try flipping the edge
-                    ate = self._edit_and_get_ate([(e1, e2, EdgeChange.FLIP)])
-                    maybe_update_best(ate, [(e1, e2, EdgeChange.FLIP)])
+                    ate = self._edit_and_get_ate([EdgeEdit(e1, e2, EdgeEditType.FLIP)])
+                    maybe_update_best(ate, [EdgeEdit(e1, e2, EdgeEditType.FLIP)])
             if r_state == EdgeState.PRESENT:
                 # Try removing the edge
-                ate = self._edit_and_get_ate([(e2, e1, EdgeChange.REMOVE)])
-                maybe_update_best(ate, [(e2, e1, EdgeChange.REMOVE)])
+                ate = self._edit_and_get_ate([EdgeEdit(e2, e1, EdgeEditType.REMOVE)])
+                maybe_update_best(ate, [EdgeEdit(e2, e1, EdgeEditType.REMOVE)])
                 if f_state == EdgeState.ABSENT:  # As opposed to banned
                     # Try flipping the edge
-                    ate = self._edit_and_get_ate([(e2, e1, EdgeChange.FLIP)])
-                    maybe_update_best(ate, [(e2, e1, EdgeChange.FLIP)])
+                    ate = self._edit_and_get_ate([EdgeEdit(e2, e1, EdgeEditType.FLIP)])
+                    maybe_update_best(ate, [EdgeEdit(e2, e1, EdgeEditType.FLIP)])
 
         return (best_edits, furthest_ate)
-    
+
     def _suggest_best_single_edge_change_heuristic(
         self,
-    ) -> List[Any]:
+    ) -> Tuple[list[EdgeEdit], float]:
         """
         Suggest the best single edge change based on A star
 
         Returns:
-            A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
+            A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
-        a_star = AStarSearch(self._graph, self._treatment_idx, self._outcome_idx. self._data)
-        return a_star.astar()
-        
+        a_star = AStarSearch(
+            self._graph, self._treatment_idx, self._outcome_idx.self._data
+        )
+        return a_star.astar()  ## TODO: Enforce correct return type
 
     def _suggest_best_single_adjustment_set_change(
         self,
-    ) -> Tuple[pd.DataFrame, float]:
+    ) -> Tuple[list[EdgeEdit], float]:
         """
         Suggest the best_single_adjustment_set_changes that maximally changes the ATE.
 
         Changes are translated to edge changes in a rudimentary manner.
 
         Returns:
-            A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
+            A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
         base_ate = self.get_ate()
         furthest_ate = self.get_ate()
         best_ate_diff = 0
-        best_edits = pd.DataFrame(columns=["Source", "Destination", "Change"])
+        best_edits = []
 
         def maybe_update_best(ate, edits):
             nonlocal best_ate_diff
@@ -570,9 +558,7 @@ class ECCS:
             if ate_diff > best_ate_diff:
                 best_ate_diff = ate_diff
                 furthest_ate = ate
-                best_edits = pd.DataFrame(
-                    edits, columns=["Source", "Destination", "Change"]
-                )
+                best_edits = edits
 
         base_adj_set = nx.algorithms.minimal_d_separator(
             self._graph, self.treatment, self.outcome
@@ -586,8 +572,8 @@ class ECCS:
         # Try adding each of the addable
         for v in vars_not_in_adj_set:
             edits = [
-                (v, self.treatment, EdgeChange.ADD),
-                (v, self.outcome, EdgeChange.ADD),
+                EdgeEdit(v, self.treatment, EdgeEditType.ADD),
+                EdgeEdit(v, self.outcome, EdgeEditType.ADD),
             ]
             ate = self._edit_and_get_ate(edits, base_ate, best_ate_diff)
             maybe_update_best(ate, edits)
@@ -595,7 +581,7 @@ class ECCS:
         # Try removing each of the removable
         for v in base_adj_set:
             edits = [
-                (self.treatment, v, EdgeChange.ADD),
+                EdgeEdit(self.treatment, v, EdgeEditType.ADD),
             ]
             ate = self._edit_and_get_ate(edits, base_ate, best_ate_diff)
             maybe_update_best(ate, edits)
@@ -604,12 +590,12 @@ class ECCS:
 
     def _suggest_random_single_edge_change(
         self,
-    ) -> Tuple[pd.DataFrame, float]:
+    ) -> Tuple[list[EdgeEdit], float]:
         """
         Suggest a random_single_edge_change.
 
         Returns:
-            A tuple containing the suggested modification(s) as a dataframe and the resulting ATE.
+            A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
 
         while True:
@@ -640,26 +626,26 @@ class ECCS:
             if f_state == EdgeState.BANNED:
                 # Toggle the state of the inverse edge
                 if r_state == EdgeState.ABSENT:
-                    edit = (e2, e1, EdgeChange.ADD)
+                    edit = EdgeEdit(e2, e1, EdgeEditType.ADD)
                 else:
-                    edit = (e2, e1, EdgeChange.REMOVE)
+                    edit = EdgeEdit(e2, e1, EdgeEditType.REMOVE)
 
             if r_state == EdgeState.BANNED:
                 # Toggle the state of the forward edge
                 if f_state == EdgeState.ABSENT:
-                    edit = (e1, e2, EdgeChange.ADD)
+                    edit = EdgeEdit(e1, e2, EdgeEditType.ADD)
                 else:
-                    edit = (e1, e2, EdgeChange.REMOVE)
+                    edit = EdgeEdit(e1, e2, EdgeEditType.REMOVE)
 
             # At this point neither is fixed and neither is banned.
             if f_state == EdgeState.PRESENT:
-                edit = (e1, e2, EdgeChange.REMOVE)
+                edit = EdgeEdit(e1, e2, EdgeEditType.REMOVE)
             elif r_state == EdgeState.PRESENT:
-                edit = (e2, e1, EdgeChange.REMOVE)
+                edit = EdgeEdit(e2, e1, EdgeEditType.REMOVE)
             elif np.random.choice([True, False]):
-                edit = (e1, e2, EdgeChange.ADD)
+                edit = EdgeEdit(e1, e2, EdgeEditType.ADD)
             else:
-                edit = (e2, e1, EdgeChange.ADD)
+                edit = EdgeEdit(e2, e1, EdgeEditType.ADD)
 
             ate = self._edit_and_get_ate([edit])
 
@@ -667,6 +653,6 @@ class ECCS:
                 continue
 
             return (
-                pd.DataFrame([edit], columns=["Source", "Destination", "Change"]),
+                [edit],
                 ate,
             )

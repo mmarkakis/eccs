@@ -1,6 +1,7 @@
 from __future__ import annotations
 import networkx as nx
-from ..eccs.eccs import ECCS, EdgeChange
+from ..eccs.eccs import ECCS
+from ..eccs.edits import EdgeEditType
 from ..eccs.ate import ATECalculator
 import pandas as pd
 import numpy as np
@@ -172,16 +173,16 @@ class ECCSUser:
         for edge in self._true_graph.edges():
             if edge not in self._eccs.graph.edges():
                 if edge[::-1] in self._eccs.graph.edges():
-                    changes.append((edge[::-1], edge, EdgeChange.FLIP))
+                    changes.append((edge[::-1], edge, EdgeEditType.FLIP))
                 else:
-                    changes.append((edge, None, EdgeChange.ADD))
+                    changes.append((edge, None, EdgeEditType.ADD))
 
         for edge in self._eccs.graph.edges():
             if (
                 edge not in self._true_graph.edges()
                 and edge[::-1] not in self._true_graph.edges()
             ):
-                changes.append((edge, None, EdgeChange.REMOVE))
+                changes.append((edge, None, EdgeEditType.REMOVE))
 
         return changes
 
@@ -236,57 +237,49 @@ class ECCSUser:
         if (method is None) or (method not in self._eccs.EDGE_SUGGESTION_METHODS):
             method = self._eccs.EDGE_SUGGESTION_METHODS[0]
 
-        # Get suggested modifications and seelctively apply them
+        # Get suggested modifications and selectively apply them
         edits, ate = self._eccs.suggest(method)
         if len(edits) == 0:
 
             print(f"In iteration {self._invocations + 1} ECCS suggested no changes.")
             return False
-        for tup in edits.itertuples():
+        for src, dst, edit_type in edits:
 
             print(
-                f"In iteration {self._invocations + 1} ECCS suggested: {tup.Change} {tup.Source} -> {tup.Destination}"
+                f"In iteration {self._invocations + 1} ECCS suggested: {edit_type} {src} -> {dst}"
             )
-            edge = (tup.Source, tup.Destination)
-            if tup.Change == EdgeChange.ADD and edge not in self._eccs.graph.edges():
+            edge = (src, dst)
+            if edit_type == EdgeEditType.ADD and edge not in self._eccs.graph.edges():
                 if edge in self._true_graph.edges():
-                    self._eccs.add_edge(tup.Source, tup.Destination)
-                    self._eccs.fix_edge(tup.Source, tup.Destination)
+                    self._eccs.add_edge(src, dst)
+                    self._eccs.fix_edge(src, dst)
 
-                    print(
-                        f"\tThis led the user to add and fix the edge {tup.Source} -> {tup.Destination}"
-                    )
+                    print(f"\tThis led the user to add and fix the edge {src} -> {dst}")
                 else:
-                    self._eccs.ban_edge(tup.Source, tup.Destination)
-                    print(
-                        f"\tThis led the user to ban the edge {tup.Source} -> {tup.Destination}"
-                    )
-            elif tup.Change == EdgeChange.REMOVE and edge in self._eccs.graph.edges():
+                    self._eccs.ban_edge(src, dst)
+                    print(f"\tThis led the user to ban the edge {src} -> {dst}")
+            elif edit_type == EdgeEditType.REMOVE and edge in self._eccs.graph.edges():
                 if edge not in self._true_graph.edges():
-                    self._eccs.remove_edge(tup.Source, tup.Destination)
-                    self._eccs.ban_edge(tup.Source, tup.Destination)
+                    self._eccs.remove_edge(src, dst)
+                    self._eccs.ban_edge(src, dst)
 
                     print(
-                        f"\tThis led the user to remove and ban the edge {tup.Source} -> {tup.Destination}"
+                        f"\tThis led the user to remove and ban the edge {src} -> {dst}"
                     )
                 else:
-                    self._eccs.fix_edge(tup.Source, tup.Destination)
-                    print(
-                        f"\tThis led the user to fix the edge {tup.Source} -> {tup.Destination}"
-                    )
-            elif tup.Change == EdgeChange.FLIP and edge in self._eccs.graph.edges():
+                    self._eccs.fix_edge(src, dst)
+                    print(f"\tThis led the user to fix the edge {src} -> {dst}")
+            elif edit_type == EdgeEditType.FLIP and edge in self._eccs.graph.edges():
                 if edge[::-1] in self._true_graph.edges():
-                    self._eccs.remove_edge(tup.Source, tup.Destination)
-                    self._eccs.add_edge(tup.Destination, tup.Source)
-                    self._eccs.fix_edge(tup.Destination, tup.Source)
+                    self._eccs.remove_edge(src, dst)
+                    self._eccs.add_edge(dst, src)
+                    self._eccs.fix_edge(dst, src)
                     print(
-                        f"\tThis led the user to flip the edge {tup.Source} -> {tup.Destination} and fix the edge {tup.Destination} -> {tup.Source}"
+                        f"\tThis led the user to flip the edge {src} -> {dst} and fix the edge {dst} -> {src}"
                     )
                 else:
-                    self._eccs.ban_edge(tup.Destination, tup.Source)
-                    print(
-                        f"\tThis led the user to ban the edge {tup.Destination} -> {tup.Source}"
-                    )
+                    self._eccs.ban_edge(dst, src)
+                    print(f"\tThis led the user to ban the edge {dst} -> {src}")
 
         # Update bookkeeping
         self._invocations += 1
