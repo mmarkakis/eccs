@@ -93,6 +93,14 @@ def simulate(
         f"{exp_prefix}edit_distance_trajectory.npy",
         user.edit_distance_trajectory,
     )
+    np.save(
+        f"{exp_prefix}invocation_duration_trajectory.npy",
+        user.invocation_duration_trajectory,
+    )
+    np.save(
+        f"{exp_prefix}edits_per_invocation_trajectory.npy",
+        user.edits_per_invocation_trajectory,
+    )
 
     f.close()
 

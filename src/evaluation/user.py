@@ -5,6 +5,7 @@ from ..eccs.edits import EdgeEditType
 from ..eccs.ate import ATECalculator
 import pandas as pd
 import numpy as np
+from datetime import datetime
 
 
 class ECCSUser:
@@ -59,6 +60,8 @@ class ECCSUser:
         self._invocations = 0
         self._ate_trajectory = [self.current_ate]
         self._edit_disance_trajectory = [self.current_graph_edit_distance]
+        self._invocation_duration_trajectory = []
+        self._edits_per_invocation_trajectory = []
 
         print("Initialized ECCS user!")
         print(f"True ATE: {self.true_ate}")
@@ -226,6 +229,26 @@ class ECCSUser:
         """
         return self._edit_disance_trajectory
 
+    @property
+    def invocation_duration_trajectory(self) -> list[float]:
+        """
+        Returns the trajectory of the invocation durations over the invocations.
+
+        Returns:
+            The trajectory of the invocation durations over the invocations.
+        """
+        return self._invocation_duration_trajectory
+
+    @property
+    def edits_per_invocation_trajectory(self) -> list[int]:
+        """
+        Returns the trajectory of the number of edits per invocation over the invocations.
+
+        Returns:
+            The trajectory of the number of edits per invocation over the invocations.
+        """
+        return self._edits_per_invocation_trajectory
+
     def invoke_eccs(self, method: str = None) -> bool:
         """
         Invokes the ECCS system and updates the fixed and banned nodes accordingly.
@@ -238,16 +261,17 @@ class ECCSUser:
             method = self._eccs.EDGE_SUGGESTION_METHODS[0]
 
         # Get suggested modifications and selectively apply them
+        start = datetime.now()
         edits, ate = self._eccs.suggest(method)
+        end = datetime.now()
+        self._invocation_duration_trajectory.append((end - start).total_seconds())
+        self._edits_per_invocation_trajectory.append(len(edits))
+        print(
+            f"In iteration {self._invocations + 1} ECCS suggested: {edits} in {self._invocation_duration_trajectory[-1]} seconds."
+        )
         if len(edits) == 0:
-
-            print(f"In iteration {self._invocations + 1} ECCS suggested no changes.")
             return False
         for src, dst, edit_type in edits:
-
-            print(
-                f"In iteration {self._invocations + 1} ECCS suggested: {edit_type} {src} -> {dst}"
-            )
             edge = (src, dst)
             if edit_type == EdgeEditType.ADD and edge not in self._eccs.graph.edges():
                 if edge in self._true_graph.edges():
@@ -286,9 +310,13 @@ class ECCSUser:
         self._ate_trajectory.append(self.current_ate)
         self._edit_disance_trajectory.append(self.current_graph_edit_distance)
 
-        print(f"\tUpdated ATE: {self.current_ate}")
-        print(f"\tUpdated ATE difference: {self.current_ate_diff}")
-        print(f"\tUpdated edit distance: {self.current_graph_edit_distance}")
+        print(f"\tUpdated ATE: {self.current_ate} (from {self.ate_trajectory[-2]})")
+        print(
+            f"\tUpdated ATE difference: {self.current_ate_diff} (from {self.ate_diff_trajectory[-2]})"
+        )
+        print(
+            f"\tUpdated edit distance: {self.current_graph_edit_distance} (from {self.edit_distance_trajectory[-2]})"
+        )
         return True
 
     def run(self, steps: int, method: str = None) -> None:
@@ -301,8 +329,12 @@ class ECCSUser:
             method: The method to use for edge suggestions.
         """
 
-        for _ in range(steps):
+        for i in range(steps):
+            print(f"Running iteration {i + 1}")
             suggested_edits = self.invoke_eccs(method)
             if not suggested_edits:
-                print("ECCS suggested no changes. Stopping.")
+                print(
+                    "ECCS suggested no changes. Stopping. Total suggested edits over time: ",
+                    sum(self._edits_per_invocation_trajectory),
+                )
                 break
