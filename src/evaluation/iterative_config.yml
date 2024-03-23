@@ -21,4 +21,10 @@ gen_starting_dag:
 run_eccs:
   num_steps: 10
   num_tries_for_random_method: 5
-  methods: ["best_single_edge_change", "best_single_adjustment_set_change", "random_single_edge_change"]
+  methods:
+    [
+      "best_single_edge_change",
+      "best_single_adjustment_set_change",
+      "best_single_adjustment_set_change_naive",
+      "random_single_edge_change",
+    ]

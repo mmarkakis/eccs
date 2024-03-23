@@ -25,6 +25,12 @@ LINE_FORMATTING_DATA = {
         "marker": "o",
         "path": "best_single_adjustment_set_change",
     },
+    "ECCS Adj Set Naive": {
+        "label": "ECCS - Single Adjustment Set Change Naive",
+        "color": "#7FBA82",
+        "marker": "x",
+        "path": "best_single_adjustment_set_change_naive",
+    },
 }
 
 FONTSIZE = 16
@@ -68,8 +74,10 @@ def plot_edit_distance(ax: Axes, method: str, points: int, base_path: str) -> fl
 
             file_count += 1
 
-    if file_count > 0:
-        elementwise_average = accumulator / file_count
+    if file_count == 0:
+        return 0
+
+    elementwise_average = accumulator / file_count
 
     ax.plot(
         range(len(elementwise_average)),
@@ -132,11 +140,13 @@ def plot_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> float:
 
             file_count += 1
 
-    if file_count > 0:
-        elementwise_average = accumulator / file_count
-
     print(f"File count was {file_count}")
     print(f"The final ATE difference was 0 for {count_zeros} files")
+
+    if file_count == 0:
+        return 0
+
+    elementwise_average = accumulator / file_count
 
     ax.plot(
         range(len(elementwise_average)),
@@ -188,9 +198,10 @@ def main():
     max1 = plot_edit_distance(ax, "Baseline", num_points, args.path)
     max2 = plot_edit_distance(ax, "ECCS Edge", num_points, args.path)
     max3 = plot_edit_distance(ax, "ECCS Adj Set", num_points, args.path)
+    max4 = plot_edit_distance(ax, "ECCS Adj Set Naive", num_points, args.path)
     ax.set_ylabel("Graph Edit Distance\nfrom Ground Truth", fontsize=FONTSIZE)
     wrapup_plot(
-        os.path.join(plots_path, "edit_distance.png"), ax, max(max1, max2, max3)
+        os.path.join(plots_path, "edit_distance.png"), ax, max(max1, max2, max3, max4)
     )
 
     ### ATE difference
@@ -199,8 +210,11 @@ def main():
     max1 = plot_ate_diff(ax, "Baseline", num_points, args.path)
     max2 = plot_ate_diff(ax, "ECCS Edge", num_points, args.path)
     max3 = plot_ate_diff(ax, "ECCS Adj Set", num_points, args.path)
+    max4 = plot_ate_diff(ax, "ECCS Adj Set Naive", num_points, args.path)
     ax.set_ylabel("Absolute Relative ATE Error", fontsize=FONTSIZE)
-    wrapup_plot(os.path.join(plots_path, "ate_error.png"), ax, max(max1, max2, max3))
+    wrapup_plot(
+        os.path.join(plots_path, "ate_error.png"), ax, max(max1, max2, max3, max4)
+    )
 
 
 if __name__ == "__main__":

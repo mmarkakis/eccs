@@ -8,6 +8,7 @@ from .edge_state_matrix import EdgeState, EdgeStateMatrix
 from .edits import EdgeEditType, EdgeEdit
 from .graph_renderer import GraphRenderer
 from .heuristic_search import AStarSearch
+from .map_adj_set_to_graph import MapAdjSetToGraph
 
 from itertools import combinations
 from tqdm.auto import tqdm
@@ -23,6 +24,7 @@ class ECCS:
     EDGE_SUGGESTION_METHODS = [
         "best_single_edge_change",
         "best_single_adjustment_set_change",
+        "best_single_adjustment_set_change_naive",
         "astar_single_edge_change",
         "random_single_edge_change",
     ]
@@ -376,7 +378,9 @@ class ECCS:
         if method == "best_single_edge_change":
             return self._suggest_best_single_edge_change()
         elif method == "best_single_adjustment_set_change":
-            return self._suggest_best_single_adjustment_set_addition()
+            return self._suggest_best_single_adjustment_set_change(naive=False)
+        elif method == "best_single_adjustment_set_change_naive":
+            return self._suggest_best_single_adjustment_set_change(naive=True)
         elif method == "random_single_edge_change":
             return self._suggest_random_single_edge_change()
         elif method == "astar_single_edge_change":
@@ -398,6 +402,7 @@ class ECCS:
 
         # Edit graph
         for src, dst, edit_type in edits:
+            print("Applying edit: ", src, dst, edit_type)
             if edit_type == EdgeEditType.ADD:
                 graph.add_edge(src, dst)
             elif edit_type == EdgeEditType.REMOVE:
@@ -406,10 +411,16 @@ class ECCS:
                 graph.remove_edge(src, dst)
                 graph.add_edge(dst, src)
 
+        print("Applied edits successfully")
+
         # Compute the ATE if the graph is acceptable
         if self._is_acceptable(graph):
-            return self.get_ate(graph, self.treatment, self.outcome)
+            print("Graph is acceptable after edits: ", edits)
+            ate = self.get_ate(graph, self.treatment, self.outcome)
+            print("Got back ATE: ", ate)
+            return ate
 
+        print("Graph is not acceptable after edits: ", edits)
         return None
 
     def _edit_and_draw(self, edits: list[EdgeEdit]) -> Optional[str]:
@@ -532,16 +543,18 @@ class ECCS:
         return a_star.astar()  ## TODO: Enforce correct return type
 
     def _suggest_best_single_adjustment_set_change(
-        self,
+        self, naive: bool
     ) -> Tuple[list[EdgeEdit], float]:
         """
         Suggest the best_single_adjustment_set_changes that maximally changes the ATE.
 
-        Changes are translated to edge changes in a rudimentary manner.
+        Parameters:
+            naive: Whether to use the naive approach for translating adjustment sets to graph edits.
 
         Returns:
             A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
+        print("Suggesting best single adjustment set change")
         base_ate = self.get_ate()
         furthest_ate = self.get_ate()
         best_ate_diff = 0
@@ -563,28 +576,38 @@ class ECCS:
         base_adj_set = nx.algorithms.minimal_d_separator(
             self._graph, self.treatment, self.outcome
         )
+        print("Found base adjustment set: ", base_adj_set)
         vars_not_in_adj_set = [
             v
             for v in self.vars
             if v not in base_adj_set and v != self.treatment and v != self.outcome
         ]
 
+        mapper = MapAdjSetToGraph(
+            self.graph, self.treatment, self.outcome, base_adj_set
+        )
+
         # Try adding each of the addable
         for v in vars_not_in_adj_set:
-            edits = [
-                EdgeEdit(v, self.treatment, EdgeEditType.ADD),
-                EdgeEdit(v, self.outcome, EdgeEditType.ADD),
-            ]
-            ate = self._edit_and_get_ate(edits, base_ate, best_ate_diff)
-            maybe_update_best(ate, edits)
+            print(f"Trying to add {v} to the adjustment set")
+            edit_lists = mapper.map_addition(v, naive=naive)
+            print("Got back edit list for addition: ", edit_lists)
+            for edit_list in edit_lists:
+                print("A possible set of edits would be: ", edit_list)
+                ate = self._edit_and_get_ate(edit_list)
+                maybe_update_best(ate, edit_list)
 
         # Try removing each of the removable
         for v in base_adj_set:
-            edits = [
-                EdgeEdit(self.treatment, v, EdgeEditType.ADD),
-            ]
-            ate = self._edit_and_get_ate(edits, base_ate, best_ate_diff)
-            maybe_update_best(ate, edits)
+            print(f"Trying to remove {v} from the adjustment set")
+            edit_lists = mapper.map_removal(v, naive=naive)
+            print("Got back edit lists for removal: ", edit_lists)
+            for edit_list in edit_lists:
+                print("A possible set of edits would be: ", edit_list)
+                ate = self._edit_and_get_ate(edit_list)
+                maybe_update_best(ate, edit_list)
+
+        print("Done evaluating options")
 
         return (best_edits, furthest_ate)
 
