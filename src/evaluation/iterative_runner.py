@@ -15,6 +15,18 @@ import asyncio
 from datetime import datetime
 from tqdm.auto import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import traceback
+import signal
+from functools import partial
+
+
+def kill_still_running(executor, futures, sig, frame):
+    print("Signal received, cleaning up...")
+    for future in futures:
+        future.cancel()
+    executor.shutdown(wait=True)
+    print("All processes terminated.")
+    exit(0)
 
 
 def simulate(
@@ -32,7 +44,7 @@ def simulate(
     ]
 ) -> None:
     """
-    Similate a single run of ECCS user and save the results.
+    Simulate a single run of ECCS user and save the results.
 
     Parameters:
         args: a tuple containing:
@@ -69,15 +81,18 @@ def simulate(
     sys.stdout = f
     sys.stderr = f
 
-    user = ECCSUser(
-        data,
-        ground_truth_dag["graph"],
-        starting_dag["graph"],
-        treatment,
-        outcome,
-    )
+    try:
+        user = ECCSUser(
+            data,
+            ground_truth_dag["graph"],
+            starting_dag["graph"],
+            treatment,
+            outcome,
+        )
 
-    user.run(num_steps, method)
+        user.run(num_steps, method)
+    except:
+        traceback.print_exc(file=f)
 
     f.flush()
 
@@ -127,62 +142,116 @@ async def main():
     with open(args.config_path, "r") as file:
         config = yaml.safe_load(file)
 
-    work_path = os.path.join(args.out_path, f"{datetime.now()}")
+    phases_to_skip = config["general"]["phases_to_skip"]
+    path_timestamp = (
+        f"{datetime.now()}" if phases_to_skip == 0 else config["general"]["timestamp"]
+    )
+    work_path = os.path.join(args.out_path, path_timestamp)
     os.makedirs(work_path, exist_ok=True)
     with open(os.path.join(work_path, "config.yml"), "w") as file:
         yaml.dump(config, file)
 
     # 1. Generate the ground truth dags
     print("-----------------")
-    print(f"{datetime.now()} Phase 1: Generating ground truth dags")
     ground_truth_dags_path = os.path.join(work_path, "ground_truth_dags")
     os.makedirs(ground_truth_dags_path, exist_ok=True)
     ground_truth_dags = {}
-    for _ in tqdm(range(config["gen_dag"]["ground_truth_dags"])):
-        ret_dict = RandomDAGGenerator.generate(
-            config["gen_dag"]["num_nodes"],
-            config["gen_dag"]["edge_prob"],
-            tuple(config["gen_dag"]["edge_weight_range"]),
-            tuple(config["gen_dag"]["edge_noise_sd_range"]),
-            ground_truth_dags_path,
-        )
-        ground_truth_dags[ret_dict["name"]] = ret_dict
+    if phases_to_skip < 1:
+        print(f"{datetime.now()} Phase 1: Generating ground truth dags")
+        for _ in tqdm(range(config["gen_dag"]["ground_truth_dags"])):
+            ret_dict = RandomDAGGenerator.generate(
+                config["gen_dag"]["num_nodes"],
+                config["gen_dag"]["edge_prob"],
+                tuple(config["gen_dag"]["edge_weight_range"]),
+                tuple(config["gen_dag"]["edge_noise_sd_range"]),
+                ground_truth_dags_path,
+            )
+            ground_truth_dags[ret_dict["name"]] = ret_dict
+    else:
+        print(f"{datetime.now()} Phase 1: Loading ground truth dags")
+        for file in tqdm(os.listdir(ground_truth_dags_path)):
+            if file.endswith(".dot"):
+                name = file[:12]
+                ground_truth_dags[name] = {
+                    "name": name,
+                    "graph": nx.nx_pydot.read_dot(
+                        os.path.join(ground_truth_dags_path, file)
+                    ),
+                    "edge_matrix": np.load(
+                        os.path.join(ground_truth_dags_path, f"{name}_edge_matrix.npy")
+                    ),
+                    "noise_matrix": np.load(
+                        os.path.join(ground_truth_dags_path, f"{name}_noise_matrix.npy")
+                    ),
+                }
 
     # 2. Generate the datasets
     print("-----------------")
-    print(f"{datetime.now()} Phase 2: Generating datasets")
     datasets_path = os.path.join(work_path, "datasets")
     os.makedirs(datasets_path, exist_ok=True)
     dataset_names = {}
-    for dag_dict in tqdm(ground_truth_dags.values()):
-        dataset_names[dag_dict["name"]] = []
-        for _ in range(config["gen_dataset"]["datasets_per_ground_truth_dag"]):
-            dataset_dict = RandomDatasetGenerator.generate(
-                dag_dict["name"],
-                dag_dict["edge_matrix"],
-                dag_dict["noise_matrix"],
-                config["gen_dataset"]["num_points"],
-                config["gen_dataset"]["min_source_val"],
-                config["gen_dataset"]["max_source_val"],
-                datasets_path,
-            )
-            dataset_names[dag_dict["name"]].append(dataset_dict["name"])
+    if phases_to_skip < 2:
+        print(f"{datetime.now()} Phase 2: Generating datasets")
+        for dag_dict in tqdm(ground_truth_dags.values()):
+            dataset_names[dag_dict["name"]] = []
+            for _ in range(config["gen_dataset"]["datasets_per_ground_truth_dag"]):
+                dataset_dict = RandomDatasetGenerator.generate(
+                    dag_dict["name"],
+                    dag_dict["edge_matrix"],
+                    dag_dict["noise_matrix"],
+                    config["gen_dataset"]["num_points"],
+                    config["gen_dataset"]["min_source_val"],
+                    config["gen_dataset"]["max_source_val"],
+                    datasets_path,
+                )
+                dataset_names[dag_dict["name"]].append(dataset_dict["name"])
+    else:
+        print(f"{datetime.now()} Phase 2: Loading datasets")
+        for dag_dict in tqdm(ground_truth_dags.values()):
+            dataset_names[dag_dict["name"]] = []
+            for file in os.listdir(datasets_path):
+                if file.startswith(dag_dict["name"]) and file.endswith(".csv"):
+                    dataset_names[dag_dict["name"]].append(
+                        {
+                            "name": file[:29],
+                            "data": pd.read_csv(os.path.join(datasets_path, file)),
+                        }
+                    )
 
     # 3. Generate the random starting dags
     print("-----------------")
-    print(f"{datetime.now()} Phase 3: Generating starting dags")
     starting_dags_path = os.path.join(work_path, "starting_dags")
     os.makedirs(starting_dags_path, exist_ok=True)
     starting_dags = {}
-    for _ in tqdm(range(config["gen_starting_dag"]["starting_dags"])):
-        ret_val = RandomDAGGenerator.generate(
-            config["gen_starting_dag"]["num_nodes"],
-            config["gen_starting_dag"]["edge_prob"],
-            tuple(config["gen_starting_dag"]["edge_weight_range"]),
-            tuple(config["gen_starting_dag"]["edge_noise_sd_range"]),
-            starting_dags_path,
-        )
-        starting_dags[ret_val["name"]] = ret_val
+
+    if phases_to_skip < 3:
+        print(f"{datetime.now()} Phase 3: Generating starting dags")
+        for _ in tqdm(range(config["gen_starting_dag"]["starting_dags"])):
+            ret_val = RandomDAGGenerator.generate(
+                config["gen_starting_dag"]["num_nodes"],
+                config["gen_starting_dag"]["edge_prob"],
+                tuple(config["gen_starting_dag"]["edge_weight_range"]),
+                tuple(config["gen_starting_dag"]["edge_noise_sd_range"]),
+                starting_dags_path,
+            )
+            starting_dags[ret_val["name"]] = ret_val
+    else:
+        print(f"{datetime.now()} Phase 3: Loading starting dags")
+        for file in tqdm(os.listdir(starting_dags_path)):
+            if file.endswith(".dot"):
+                name = file[:12]
+                starting_dags[name] = {
+                    "name": name,
+                    "graph": nx.nx_pydot.read_dot(
+                        os.path.join(starting_dags_path, file)
+                    ),
+                    "edge_matrix": np.load(
+                        os.path.join(starting_dags_path, f"{name}_edge_matrix.npy")
+                    ),
+                    "noise_matrix": np.load(
+                        os.path.join(starting_dags_path, f"{name}_noise_matrix.npy")
+                    ),
+                }
 
     # 4. Run the methods and store results
     print("-----------------")
@@ -267,6 +336,8 @@ async def main():
     with ProcessPoolExecutor() as executor:
         # Submit all tasks to the executor
         futures = [executor.submit(simulate, task) for task in tasks]
+        handler = partial(kill_still_running, executor, futures)
+        signal.signal(signal.SIGINT, handler)
 
         # As each future completes, update the progress bar
         for _ in as_completed(futures):
@@ -275,4 +346,5 @@ async def main():
 
 
 if __name__ == "__main__":
+
     asyncio.run(main())
