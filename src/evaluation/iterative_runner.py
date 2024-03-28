@@ -18,6 +18,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import traceback
 import signal
 from functools import partial
+from src.evaluation.plotter import plotter
 
 
 def kill_still_running(executor, futures, sig, frame):
@@ -291,56 +292,73 @@ async def main():
 
     # 4. Run the methods and store results
     print("-----------------")
-    print(f"{datetime.now()} Phase 4: Starting experiment")
     num_steps = config["run_eccs"]["num_steps"]
     methods = config["run_eccs"]["methods"]
-    for method in methods:
-        os.makedirs(os.path.join(work_path, method), exist_ok=True)
-        os.makedirs(os.path.join(work_path, method, "logs"), exist_ok=True)
-        os.makedirs(os.path.join(work_path, method, "data"), exist_ok=True)
     num_random_tries = config["run_eccs"]["num_tries_for_random_method"]
     num_tasks = len(methods) + (
         (num_random_tries - 1) if "random_single_edge_change" in methods else 0
     )
 
-    tasks = []
-    pbar = tqdm(
-        total=config["gen_dag"]["ground_truth_dags"]
-        * config["gen_dataset"]["datasets_per_ground_truth_dag"]
-        * config["gen_starting_dag"]["starting_dags"]
-        * int(
-            config["gen_dag"]["num_nodes"] * (config["gen_dag"]["num_nodes"] - 1) / 2
-        )  # Choices of treatment / outcome
-        * num_tasks
-    )
-    # For each ground truth dag...
-    for ground_truth_dag_name, datasets in dataset_names.items():
-        ground_truth_dag = ground_truth_dags[ground_truth_dag_name]
-        # For each dataset...
-        for dataset_name in datasets:
-            data = pd.read_csv(os.path.join(datasets_path, f"{dataset_name}.csv"))
-            # For each starting dag...
-            for starting_dag in starting_dags.values():
-                # For each choice of treatment...
-                for treatment_idx in range(config["gen_dag"]["num_nodes"]):
-                    # For each choice of outcome...
-                    for outcome_idx in range(
-                        treatment_idx + 1, config["gen_dag"]["num_nodes"]
-                    ):
+    if phases_to_skip < 4:
+        print(f"{datetime.now()} Phase 4: Starting experiment")
+        for method in methods:
+            os.makedirs(os.path.join(work_path, method), exist_ok=True)
+            os.makedirs(os.path.join(work_path, method, "logs"), exist_ok=True)
+            os.makedirs(os.path.join(work_path, method, "data"), exist_ok=True)
+        
+        tasks = []
+        pbar = tqdm(
+            total=config["gen_dag"]["ground_truth_dags"]
+            * config["gen_dataset"]["datasets_per_ground_truth_dag"]
+            * config["gen_starting_dag"]["starting_dags"]
+            * int(
+                config["gen_dag"]["num_nodes"] * (config["gen_dag"]["num_nodes"] - 1) / 2
+            )  # Choices of treatment / outcome
+            * num_tasks
+        )
+        # For each ground truth dag...
+        for ground_truth_dag_name, datasets in dataset_names.items():
+            ground_truth_dag = ground_truth_dags[ground_truth_dag_name]
+            # For each dataset...
+            for dataset_name in datasets:
+                data = pd.read_csv(os.path.join(datasets_path, f"{dataset_name}.csv"))
+                # For each starting dag...
+                for starting_dag in starting_dags.values():
+                    # For each choice of treatment...
+                    for treatment_idx in range(config["gen_dag"]["num_nodes"]):
+                        # For each choice of outcome...
+                        for outcome_idx in range(
+                            treatment_idx + 1, config["gen_dag"]["num_nodes"]
+                        ):
 
-                        treatment = f"v{treatment_idx}"
-                        outcome = f"v{outcome_idx}"
+                            treatment = f"v{treatment_idx}"
+                            outcome = f"v{outcome_idx}"
 
-                        if not nx.has_path(
-                            ground_truth_dag["graph"], treatment, outcome
-                        ) or not nx.has_path(starting_dag["graph"], treatment, outcome):
-                            pbar.update(num_tasks)
-                            continue
+                            if not nx.has_path(
+                                ground_truth_dag["graph"], treatment, outcome
+                            ) or not nx.has_path(starting_dag["graph"], treatment, outcome):
+                                pbar.update(num_tasks)
+                                continue
 
-                        # Run ECCS
-                        for method in methods:
-                            if method == "random_single_edge_change":
-                                for i in range(num_random_tries):
+                            # Run ECCS
+                            for method in methods:
+                                if method == "random_single_edge_change":
+                                    for i in range(num_random_tries):
+                                        tasks.append(
+                                            (
+                                                data,
+                                                ground_truth_dag,
+                                                starting_dag,
+                                                treatment,
+                                                outcome,
+                                                method,
+                                                os.path.join(work_path, method),
+                                                dataset_name,
+                                                num_steps,
+                                                i,
+                                            )
+                                        )
+                                else:
                                     tasks.append(
                                         (
                                             data,
@@ -352,35 +370,27 @@ async def main():
                                             os.path.join(work_path, method),
                                             dataset_name,
                                             num_steps,
-                                            i,
+                                            None,
                                         )
                                     )
-                            else:
-                                tasks.append(
-                                    (
-                                        data,
-                                        ground_truth_dag,
-                                        starting_dag,
-                                        treatment,
-                                        outcome,
-                                        method,
-                                        os.path.join(work_path, method),
-                                        dataset_name,
-                                        num_steps,
-                                        None,
-                                    )
-                                )
 
-    with ProcessPoolExecutor() as executor:
-        # Submit all tasks to the executor
-        futures = [executor.submit(simulate, task) for task in tasks]
-        handler = partial(kill_still_running, executor, futures)
-        signal.signal(signal.SIGINT, handler)
+        with ProcessPoolExecutor() as executor:
+            # Submit all tasks to the executor
+            futures = [executor.submit(simulate, task) for task in tasks]
+            handler = partial(kill_still_running, executor, futures)
+            signal.signal(signal.SIGINT, handler)
 
-        # As each future completes, update the progress bar
-        for _ in as_completed(futures):
-            pbar.update(1)
-    pbar.close()
+            # As each future completes, update the progress bar
+            for _ in as_completed(futures):
+                pbar.update(1)
+        pbar.close()
+    else:
+        print(f"{datetime.now()} Phase 4: Skipping experiment")
+
+    # 5. Regenerate plots
+    print("-----------------")
+    print(f"{datetime.now()} Phase 5: Plotting")
+    plotter(work_path, skip=False)
 
 
 if __name__ == "__main__":
