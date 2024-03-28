@@ -46,7 +46,7 @@ max_ground_truth_ate = -np.inf
 
 
 def plot_edit_distance(
-    ax: Axes, method: str, points: int, base_path: str, methods: list[str]
+    ax: Axes, method: str, points: int, base_path: str
 ) -> float:
     """
     Plots the edit distance for the given method.
@@ -56,19 +56,18 @@ def plot_edit_distance(
         method: The method to plot.
         points: The number of points to plot.
         base_path: The base path to the results.
-        methods: The list of methods that were run in this experiment.
 
     Returns:
         The maximum plotted value.
     """
 
-    if LINE_FORMATTING_DATA[method]["path"] not in methods:
-        return 0
-
     accumulator = None
     file_count = 0
 
-    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"])
+    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"], "data")
+
+    if not os.path.exists(path):
+        return 0
 
     for filename in os.listdir(path):
         if filename.endswith("edit_distance_trajectory.npy"):
@@ -102,7 +101,9 @@ def plot_edit_distance(
     return max(elementwise_average)
 
 
-def plot_ate_diff(ax: Axes, method: str, points: int, base_path: str, methods: list[str]) -> float:
+def plot_ate_diff(
+    ax: Axes, method: str, points: int, base_path: str
+) -> float:
     """
     Plots the Absolute Relative ATE Error for the given method.
 
@@ -111,20 +112,19 @@ def plot_ate_diff(ax: Axes, method: str, points: int, base_path: str, methods: l
         method: The method to plot.
         points: The number of points to plot.
         base_path: The base path to the results.
-        methods: The list of methods that were run in this experiment.
 
     Returns:
         The maximum plotted value.
     """
 
-    if LINE_FORMATTING_DATA[method]["path"] not in methods:
-        return 0
-
     accumulator = None
     file_count = 0
     count_zeros = 0
 
-    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"])
+    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"], "data")
+
+    if not os.path.exists(path):
+        return 0
 
     for filename in os.listdir(path):
         if filename.endswith("ate_diff_trajectory.npy"):
@@ -176,7 +176,7 @@ def plot_ate_diff(ax: Axes, method: str, points: int, base_path: str, methods: l
 
 
 def plot_invocation_duration(
-    ax: Axes, method: str, points: int, base_path: str, methods: list[str]
+    ax: Axes, method: str, points: int, base_path: str
 ) -> float:
     """
     Plots the duration of each invocation for the given method.
@@ -186,19 +186,18 @@ def plot_invocation_duration(
         method: The method to plot.
         points: The number of points to plot.
         base_path: The base path to the results.
-        methods: The list of methods that were run in this experiment.
 
     Returns:
         The maximum plotted value.
     """
 
-    if LINE_FORMATTING_DATA[method]["path"] not in methods:
+    accumulator = [0.0] * points
+    file_counts = [0] * points
+
+    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"], "data")
+
+    if not os.path.exists(path):
         return 0
-
-    accumulator = None
-    file_count = 0
-
-    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"])
 
     for filename in os.listdir(path):
         if filename.endswith("invocation_duration_trajectory.npy"):
@@ -206,22 +205,22 @@ def plot_invocation_duration(
             filepath = os.path.join(path, filename)
             data = np.load(filepath)
 
+            for i in range(len(data)):
+                file_counts[i] += 1
+
             if len(data) < points:
                 data = np.pad(
                     data, (0, points - len(data)), "constant", constant_values=0
                 )
 
-            if accumulator is None:
-                accumulator = [float(i) for i in data]
-            else:
-                accumulator += data
+            accumulator += data
 
-            file_count += 1
-
-    if file_count == 0:
+    if all(x == 0 for x in file_counts):
         return 0
 
-    elementwise_average = accumulator / file_count
+    elementwise_average = [
+        i / j if j != 0 else 0 for i, j in zip(accumulator, file_counts)
+    ]
 
     ax.plot(
         range(len(elementwise_average)),
@@ -235,7 +234,7 @@ def plot_invocation_duration(
 
 
 def plot_edits_per_invocation(
-    ax: Axes, method: str, points: int, base_path: str, methods: list[str]
+    ax: Axes, method: str, points: int, base_path: str
 ) -> float:
     """
     Plots the numbert of edits for each invocation for the given method.
@@ -245,19 +244,18 @@ def plot_edits_per_invocation(
         method: The method to plot.
         points: The number of points to plot.
         base_path: The base path to the results.
-        methods: The list of methods that were run in this experiment.
 
     Returns:
         The maximum plotted value.
     """
 
-    if LINE_FORMATTING_DATA[method]["path"] not in methods:
-        return 0
-
     accumulator = None
     file_count = 0
 
-    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"])
+    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"], "data")
+
+    if not os.path.exists(path):
+        return 0
 
     for filename in os.listdir(path):
         if filename.endswith("edits_per_invocation_trajectory.npy"):
@@ -336,13 +334,13 @@ def main():
         print("Skipping edit distance plot")
     else:
         _, ax = plt.subplots()
-        max1 = plot_edit_distance(ax, "Baseline", num_points, args.path, methods)
-        max2 = plot_edit_distance(ax, "ECCS Edge", num_points, args.path, methods)
-        max3 = plot_edit_distance(ax, "ECCS Adj Set", num_points, args.path, methods)
+        max1 = plot_edit_distance(ax, "Baseline", num_points, args.path)
+        max2 = plot_edit_distance(ax, "ECCS Edge", num_points, args.path)
+        max3 = plot_edit_distance(ax, "ECCS Adj Set", num_points, args.path)
         max4 = plot_edit_distance(
-            ax, "ECCS Adj Set Naive", num_points, args.path, methods
+            ax, "ECCS Adj Set Naive", num_points, args.path
         )
-        max5 = plot_edit_distance(ax, "Oracle", num_points, args.path, methods)
+        max5 = plot_edit_distance(ax, "Oracle", num_points, args.path)
         ax.set_ylabel("Graph Edit Distance\nfrom Ground Truth", fontsize=FONTSIZE)
         wrapup_plot(
             os.path.join(plots_path, "edit_distance.png"),
@@ -356,11 +354,11 @@ def main():
         print("Skipping ATE Error plot")
     else:
         _, ax = plt.subplots()
-        max1 = plot_ate_diff(ax, "Baseline", num_points, args.path, methods)
-        max2 = plot_ate_diff(ax, "ECCS Edge", num_points, args.path, methods)
-        max3 = plot_ate_diff(ax, "ECCS Adj Set", num_points, args.path, methods)
-        max4 = plot_ate_diff(ax, "ECCS Adj Set Naive", num_points, args.path, methods)
-        max5 = plot_ate_diff(ax, "Oracle", num_points, args.path, methods)
+        max1 = plot_ate_diff(ax, "Baseline", num_points, args.path)
+        max2 = plot_ate_diff(ax, "ECCS Edge", num_points, args.path)
+        max3 = plot_ate_diff(ax, "ECCS Adj Set", num_points, args.path)
+        max4 = plot_ate_diff(ax, "ECCS Adj Set Naive", num_points, args.path)
+        max5 = plot_ate_diff(ax, "Oracle", num_points, args.path)
         ax.set_ylabel("Absolute Relative ATE Error", fontsize=FONTSIZE)
         wrapup_plot(
             os.path.join(plots_path, "ate_error.png"),
@@ -376,15 +374,15 @@ def main():
         print("Skipping Invocation Duration plot")
     else:
         _, ax = plt.subplots()
-        max1 = plot_invocation_duration(ax, "Baseline", num_points, args.path, methods)
-        max2 = plot_invocation_duration(ax, "ECCS Edge", num_points, args.path, methods)
+        max1 = plot_invocation_duration(ax, "Baseline", num_points, args.path)
+        max2 = plot_invocation_duration(ax, "ECCS Edge", num_points, args.path)
         max3 = plot_invocation_duration(
-            ax, "ECCS Adj Set", num_points, args.path, methods
+            ax, "ECCS Adj Set", num_points, args.path
         )
         max4 = plot_invocation_duration(
-            ax, "ECCS Adj Set Naive", num_points, args.path, methods
+            ax, "ECCS Adj Set Naive", num_points, args.path
         )
-        max5 = plot_invocation_duration(ax, "Oracle", num_points, args.path, methods)
+        max5 = plot_invocation_duration(ax, "Oracle", num_points, args.path)
         ax.set_ylabel("Invocation Duration (s)", fontsize=FONTSIZE)
         wrapup_plot(
             os.path.join(plots_path, "invocation_duration.png"),
@@ -400,17 +398,17 @@ def main():
         print("Skipping Edits per Invocation plot")
     else:
         _, ax = plt.subplots()
-        max1 = plot_edits_per_invocation(ax, "Baseline", num_points, args.path, methods)
+        max1 = plot_edits_per_invocation(ax, "Baseline", num_points, args.path)
         max2 = plot_edits_per_invocation(
-            ax, "ECCS Edge", num_points, args.path, methods
+            ax, "ECCS Edge", num_points, args.path
         )
         max3 = plot_edits_per_invocation(
-            ax, "ECCS Adj Set", num_points, args.path, methods
+            ax, "ECCS Adj Set", num_points, args.path
         )
         max4 = plot_edits_per_invocation(
-            ax, "ECCS Adj Set Naive", num_points, args.path, methods
+            ax, "ECCS Adj Set Naive", num_points, args.path
         )
-        max5 = plot_edits_per_invocation(ax, "Oracle", num_points, args.path, methods)
+        max5 = plot_edits_per_invocation(ax, "Oracle", num_points, args.path)
         ax.set_ylabel("Edits per Invocation", fontsize=FONTSIZE)
         wrapup_plot(
             os.path.join(plots_path, "edits_per_invocation.png"),
