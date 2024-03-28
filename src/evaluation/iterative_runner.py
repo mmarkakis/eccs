@@ -73,7 +73,6 @@ def simulate(
         i,
     ) = args
 
-    os.makedirs(os.path.join(results_path, "logs"), exist_ok=True)
     f = open(
         os.path.join(
             results_path,
@@ -134,7 +133,7 @@ def simulate(
     f.flush()
 
     exp_prefix = os.path.join(
-        results_path,
+        results_path, "data",
         f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}_{'' if i == None else f'{i}_'}",
     )
 
@@ -297,6 +296,8 @@ async def main():
     methods = config["run_eccs"]["methods"]
     for method in methods:
         os.makedirs(os.path.join(work_path, method), exist_ok=True)
+        os.makedirs(os.path.join(work_path, method, "logs"), exist_ok=True)
+        os.makedirs(os.path.join(work_path, method, "data"), exist_ok=True)
     num_random_tries = config["run_eccs"]["num_tries_for_random_method"]
     num_tasks = len(methods) + (
         (num_random_tries - 1) if "random_single_edge_change" in methods else 0
