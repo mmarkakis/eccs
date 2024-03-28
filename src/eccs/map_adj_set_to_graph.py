@@ -1,10 +1,6 @@
 import networkx as nx
 
-from .edits import EdgeEditType, EdgeEdit
-from typing import TypeAlias
-
-Edge: TypeAlias = tuple[str, str]
-Path: TypeAlias = list[Edge]
+from .edges import EdgeEditType, EdgeEdit, Path
 
 
 class MapAdjSetToGraph:
@@ -50,12 +46,44 @@ class MapAdjSetToGraph:
         """
 
         if naive:
-            return [
-                [
-                    EdgeEdit(v, self.treatment, EdgeEditType.ADD),
-                    EdgeEdit(v, self.outcome, EdgeEditType.ADD),
+            if v in nx.descendants(self.graph, self.treatment):
+                W = [
+                    node
+                    for node in nx.ancestors(self.graph, v)
+                    if node in nx.descendants(self.graph, self.treatment)
                 ]
-            ]
+                lenW = len(W)
+                # Create all possible sets where each element of W is either FLIPped or REMOVEd
+                l = []
+                for i in range(2**lenW):
+                    flip_mask = bin(i)[2:].zfill(lenW)
+                    edits = [
+                        EdgeEdit(
+                            W[j],
+                            v,
+                            (
+                                EdgeEditType.FLIP
+                                if flip_mask[j] == "1"
+                                else EdgeEditType.REMOVE
+                            ),
+                        )
+                        for j in range(lenW)
+                    ]
+                    edits.extend(
+                        [
+                            EdgeEdit(v, self.treatment, EdgeEditType.ADD),
+                            EdgeEdit(v, self.outcome, EdgeEditType.ADD),
+                        ]
+                    )
+                    l.append(edits)
+                return l
+            else:
+                return [
+                    [
+                        EdgeEdit(v, self.treatment, EdgeEditType.ADD),
+                        EdgeEdit(v, self.outcome, EdgeEditType.ADD),
+                    ]
+                ]
         else:
             l = []
             # Each set of edges in l will be a Python tuple inside this function,
@@ -171,11 +199,42 @@ class MapAdjSetToGraph:
         """
 
         if naive:
-            return [
-                [
-                    EdgeEdit(self.treatment, v, EdgeEditType.ADD),
+            if v in nx.ancestors(self.graph, self.treatment):
+                W = [
+                    node
+                    for node in nx.descendants(self.graph, v)
+                    if node in nx.ancestors(self.graph, self.treatment)
                 ]
-            ]
+                lenW = len(W)
+                # Create all possible sets where each element of W is either FLIPped or REMOVEd
+                l = []
+                for i in range(2**lenW):
+                    flip_mask = bin(i)[2:].zfill(lenW)
+                    edits = [
+                        EdgeEdit(
+                            v,
+                            W[j],
+                            (
+                                EdgeEditType.FLIP
+                                if flip_mask[j] == "1"
+                                else EdgeEditType.REMOVE
+                            ),
+                        )
+                        for j in range(lenW)
+                    ]
+                    edits.extend(
+                        [
+                            EdgeEdit(self.treatment, v, EdgeEditType.ADD),
+                        ]
+                    )
+                    l.append(edits)
+                return l
+            else:
+                return [
+                    [
+                        EdgeEdit(self.treatment, v, EdgeEditType.ADD),
+                    ]
+                ]
         else:
             l = [tuple()]
             reduced_adj_set = self.base_adj_set.copy()
