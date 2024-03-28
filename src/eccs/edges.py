@@ -1,5 +1,8 @@
 import pandas as pd
+from typing import TypeAlias
 
+Edge: TypeAlias = tuple[str, str]
+Path: TypeAlias = list[Edge]
 
 class EdgeEditType:
     """
