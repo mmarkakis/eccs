@@ -73,13 +73,48 @@ def simulate(
         i,
     ) = args
 
-    exp_prefix = os.path.join(
-        results_path,
-        f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}_{'' if i == None else f'{i}_'}",
+    os.makedirs(os.path.join(results_path, "logs"), exist_ok=True)
+    f = open(
+        os.path.join(
+            results_path,
+            "logs",
+            f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}{'' if i == None else f'_{i}'}.log",
+        ),
+        "w",
     )
-    f = open(exp_prefix + ".log", "w")
     sys.stdout = f
     sys.stderr = f
+
+    fixed_list = []
+    banned_list = []
+
+    if method.endswith("_oracle"):
+        method = method[:-7]
+        # Create a fixed list out of edges the ground truth and starting dag share
+        fixed_list = [
+            (src, dst)
+            for src, dst in ground_truth_dag["graph"].edges
+            if (src, dst) in starting_dag["graph"].edges
+        ]
+        # Create a banned list out of edges that are in neither the ground truth nor the starting dag
+        all_possible_edges = [
+            (src, dst)
+            for src in ground_truth_dag["graph"].nodes
+            for dst in ground_truth_dag["graph"].nodes
+            if src != dst
+        ]
+        banned_list = [
+            (src, dst)
+            for src, dst in all_possible_edges
+            if (
+                ((src, dst) not in ground_truth_dag["graph"].edges)
+                and ((src, dst) not in starting_dag["graph"].edges)
+            )
+        ]
+
+    # Remove edge attributes from starting dag
+    for _, __, d in starting_dag["graph"].edges(data=True):
+        d.clear()
 
     try:
         user = ECCSUser(
@@ -88,6 +123,8 @@ def simulate(
             starting_dag["graph"],
             treatment,
             outcome,
+            fixed_list,
+            banned_list,
         )
 
         user.run(num_steps, method)
@@ -95,6 +132,11 @@ def simulate(
         traceback.print_exc(file=f)
 
     f.flush()
+
+    exp_prefix = os.path.join(
+        results_path,
+        f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}_{'' if i == None else f'{i}_'}",
+    )
 
     np.save(
         f"{exp_prefix}ate_trajectory.npy",
@@ -174,8 +216,8 @@ async def main():
                 name = file[:12]
                 ground_truth_dags[name] = {
                     "name": name,
-                    "graph": nx.nx_pydot.read_dot(
-                        os.path.join(ground_truth_dags_path, file)
+                    "graph": nx.DiGraph(
+                        nx.nx_pydot.read_dot(os.path.join(ground_truth_dags_path, file))
                     ),
                     "edge_matrix": np.load(
                         os.path.join(ground_truth_dags_path, f"{name}_edge_matrix.npy")
@@ -211,12 +253,7 @@ async def main():
             dataset_names[dag_dict["name"]] = []
             for file in os.listdir(datasets_path):
                 if file.startswith(dag_dict["name"]) and file.endswith(".csv"):
-                    dataset_names[dag_dict["name"]].append(
-                        {
-                            "name": file[:29],
-                            "data": pd.read_csv(os.path.join(datasets_path, file)),
-                        }
-                    )
+                    dataset_names[dag_dict["name"]].append(file[:29])
 
     # 3. Generate the random starting dags
     print("-----------------")
@@ -242,8 +279,8 @@ async def main():
                 name = file[:12]
                 starting_dags[name] = {
                     "name": name,
-                    "graph": nx.nx_pydot.read_dot(
-                        os.path.join(starting_dags_path, file)
+                    "graph": nx.DiGraph(
+                        nx.nx_pydot.read_dot(os.path.join(starting_dags_path, file))
                     ),
                     "edge_matrix": np.load(
                         os.path.join(starting_dags_path, f"{name}_edge_matrix.npy")
