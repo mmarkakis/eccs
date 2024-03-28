@@ -5,7 +5,7 @@ import networkx as nx
 from networkx.algorithms.d_separation import minimal_d_separator
 from .ate import ATECalculator
 from .edge_state_matrix import EdgeState, EdgeStateMatrix
-from .edits import EdgeEditType, EdgeEdit
+from .edges import EdgeEditType, EdgeEdit
 from .graph_renderer import GraphRenderer
 from .heuristic_search import AStarSearch
 from .map_adj_set_to_graph import MapAdjSetToGraph
@@ -49,16 +49,32 @@ class ECCS:
 
         # Load graph appropriately
         if isinstance(graph, str):
-            self._graph = nx.DiGraph(nx.nx_pydot.read_dot(graph))
-        else:
-            self._graph = graph
-        graph.add_nodes_from((n, {"var_name": n}) for n in graph.nodes)
+            graph = nx.DiGraph(nx.nx_pydot.read_dot(graph))
+
+        self._graph = nx.DiGraph()
+        self._graph.add_nodes_from((n, {"var_name": n}) for n in graph.nodes)
         for edge in graph.edges():
             self.add_edge(edge[0], edge[1])
 
         # Ban self edges.
         for i in range(self._num_vars):
             self.ban_edge(self._data.columns[i], self._data.columns[i])
+
+        print("Initialized ECCS!")
+        print(
+            f"The graph has {self._graph.number_of_nodes()} nodes and {self._graph.number_of_edges()} edges."
+        )
+        num_fixed_edges = len(self._edge_decisions_matrix.fixed_list)
+        num_banned_edges = len(self._edge_decisions_matrix.ban_list)
+        print(
+            f"Of the {self._graph.number_of_edges()} edges in the graph, {num_fixed_edges} are fixed."
+        )
+        print(
+            f"Of the {self._num_vars**2 - self._graph.number_of_edges()} edges not in the graph, {num_banned_edges} are banned."
+        )
+        print(
+            f"The number of modifiable edges is {self._num_vars**2 - num_fixed_edges - num_banned_edges}."
+        )
 
     def set_treatment(self, treatment: str) -> None:
         """
@@ -247,6 +263,19 @@ class ECCS:
                 self._graph.remove_nodes_from(list(nx.isolates(self._graph)))
             self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.ABSENT)
 
+    def get_edge_state(self, src: str, dst: str) -> EdgeState:
+        """
+        Get the state of an edge.
+
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+
+        Returns:
+            The state of the edge.
+        """
+        return self._edge_decisions_matrix.get_edge_state(src, dst)
+
     def fix_edge(self, src: str, dst: str) -> None:
         """
         Mark an edge as fixed and mark its reverse as banned.
@@ -404,12 +433,16 @@ class ECCS:
         for src, dst, edit_type in edits:
             print("Applying edit: ", src, dst, edit_type)
             if edit_type == EdgeEditType.ADD:
-                graph.add_edge(src, dst)
+                if not graph.has_edge(src, dst):
+                    graph.add_edge(src, dst)
             elif edit_type == EdgeEditType.REMOVE:
-                graph.remove_edge(src, dst)
+                if graph.has_edge(src, dst):
+                    graph.remove_edge(src, dst)
             elif edit_type == EdgeEditType.FLIP:
-                graph.remove_edge(src, dst)
-                graph.add_edge(dst, src)
+                if graph.has_edge(src, dst):
+                    graph.remove_edge(src, dst)
+                if not graph.has_edge(dst, src):
+                    graph.add_edge(dst, src)
 
         print("Applied edits successfully")
 
@@ -493,8 +526,8 @@ class ECCS:
             e2 = self._data.columns[j]
 
             # Extract edge states
-            f_state = self._edge_decisions_matrix.get_edge_state(e1, e2)
-            r_state = self._edge_decisions_matrix.get_edge_state(e2, e1)
+            f_state = self.get_edge_state(e1, e2)
+            r_state = self.get_edge_state(e2, e1)
 
             # Apply the change and evaluate the ATE
             if f_state == EdgeState.ABSENT and (
@@ -537,10 +570,9 @@ class ECCS:
         Returns:
             A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
-        a_star = AStarSearch(
-            self._graph, self._treatment_idx, self._outcome_idx.self._data
-        )
-        return a_star.astar()  ## TODO: Enforce correct return type
+        a_star = AStarSearch(self._graph, self._treatment, self._outcome, self._data)
+        edits = a_star.astar()
+        return (edits, self._edit_and_get_ate(edits))
 
     def _suggest_best_single_adjustment_set_change(
         self, naive: bool
@@ -621,54 +653,32 @@ class ECCS:
             A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
 
-        while True:
-            # Pick edge endpoints at random
-            i = np.random.randint(self._num_vars)
-            j = np.random.randint(self._num_vars)
+        # Derive the set of editable edges
+        eligible_pairs = list(combinations(range(self._num_vars), 2))
+        print("The data columns are: ", self._data.columns)
+        eligible_edges = [
+            (self._data.columns[i], self._data.columns[j]) for i, j in eligible_pairs
+        ]
+        eligible_edges = [
+            (src, dst)
+            for src, dst in eligible_edges
+            if src != dst  # Don't toggle self-edges
+            and not self.is_edge_fixed(src, dst)  # Don't touch fixed edges
+            and not self.is_edge_fixed(
+                dst, src
+            )  # No point toggling if reverse is fixed.
+            and not self.is_edge_banned(src, dst)  # Don't touch banned edges
+        ]
+        print(f"The eligible edges are: {eligible_edges}")
 
-            if i == j:
-                continue
-
-            # Extract edge endpoints
-            e1 = self._data.columns[i]
-            e2 = self._data.columns[j]
-
-            # Extract edge states
-            f_state = self._edge_decisions_matrix.get_edge_state(e1, e2)
-            r_state = self._edge_decisions_matrix.get_edge_state(e2, e1)
-
-            if (
-                f_state == EdgeState.FIXED
-                or r_state == EdgeState.FIXED
-                or (f_state == EdgeState.BANNED and r_state == EdgeState.BANNED)
-            ):
-                continue
+        while len(eligible_edges) > 0:
+            e1, e2 = eligible_edges.pop(np.random.randint(len(eligible_edges)))
 
             edit = ()
-
-            if f_state == EdgeState.BANNED:
-                # Toggle the state of the inverse edge
-                if r_state == EdgeState.ABSENT:
-                    edit = EdgeEdit(e2, e1, EdgeEditType.ADD)
-                else:
-                    edit = EdgeEdit(e2, e1, EdgeEditType.REMOVE)
-
-            if r_state == EdgeState.BANNED:
-                # Toggle the state of the forward edge
-                if f_state == EdgeState.ABSENT:
-                    edit = EdgeEdit(e1, e2, EdgeEditType.ADD)
-                else:
-                    edit = EdgeEdit(e1, e2, EdgeEditType.REMOVE)
-
-            # At this point neither is fixed and neither is banned.
-            if f_state == EdgeState.PRESENT:
-                edit = EdgeEdit(e1, e2, EdgeEditType.REMOVE)
-            elif r_state == EdgeState.PRESENT:
-                edit = EdgeEdit(e2, e1, EdgeEditType.REMOVE)
-            elif np.random.choice([True, False]):
+            if self.get_edge_state(e1, e2) == EdgeState.ABSENT:
                 edit = EdgeEdit(e1, e2, EdgeEditType.ADD)
             else:
-                edit = EdgeEdit(e2, e1, EdgeEditType.ADD)
+                edit = EdgeEdit(e1, e2, EdgeEditType.REMOVE)
 
             ate = self._edit_and_get_ate([edit])
 
