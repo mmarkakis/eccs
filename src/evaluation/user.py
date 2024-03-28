@@ -1,11 +1,13 @@
 from __future__ import annotations
 import networkx as nx
 from ..eccs.eccs import ECCS
-from ..eccs.edits import EdgeEditType
+from ..eccs.edges import EdgeEditType, Edge
 from ..eccs.ate import ATECalculator
+from ..eccs.edge_state_matrix import EdgeState
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from typing import Optional
 
 
 class ECCSUser:
@@ -23,6 +25,8 @@ class ECCSUser:
         test_graph: str | nx.DiGraph,
         treatment: str,
         outcome: str,
+        fixed: Optional[list[Edge]] = None,
+        banned: Optional[list[Edge]] = None,
     ) -> None:
         """
         Initializes the ECCSUser object.
@@ -33,6 +37,8 @@ class ECCSUser:
             test_graph: The starting graph available to the user or the path to it.
             treatment: The name of the treatment variable.
             outcome: The name of the outcome variable.
+            fixed: An optional list of fixed edges at the start.
+            banned: An optional list of banned edges at the start.
         """
 
         if isinstance(data, str):
@@ -62,6 +68,25 @@ class ECCSUser:
         self._edit_disance_trajectory = [self.current_graph_edit_distance]
         self._invocation_duration_trajectory = []
         self._edits_per_invocation_trajectory = []
+
+        if fixed:
+            for edge in fixed:
+                if self._eccs.get_edge_state(*edge) == EdgeState.PRESENT:
+                    self._eccs.fix_edge(*edge)
+                else:
+                    print(
+                        f"Warning: Fixed edge {edge} is not present in the graph. It has state {EdgeState(state)}. Skipping."
+                    )
+
+        if banned:
+            for edge in banned:
+                state = self._eccs.get_edge_state(*edge)
+                if state == EdgeState.ABSENT:
+                    self._eccs.ban_edge(*edge)
+                elif state != EdgeState.BANNED: # May be already banned because we fixed its reverse.
+                    print(
+                        f"Warning: Banned edge {edge} is not absent/banned from the graph. It has state {EdgeState(state)}. Skipping."
+                    )
 
         print("Initialized ECCS user!")
         print(f"True ATE: {self.true_ate}")
