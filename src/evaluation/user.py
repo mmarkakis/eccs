@@ -361,5 +361,8 @@ class ECCSUser:
                 print(
                     "ECCS suggested no changes. Stopping. Total suggested edits over time: ",
                     sum(self._edits_per_invocation_trajectory),
+                    "Final edit distance: ", self.current_graph_edit_distance, 
+                    "Final ATE: ", self.current_ate,
+                    "Final ATE difference: ", self.current_ate_diff
                 )
                 break
