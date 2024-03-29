@@ -282,9 +282,6 @@ def plot_edits_per_invocation(
     if all(x == 0 for x in file_counts):
         return 0
     
-    print(accumulator)
-    print(file_counts)
-    
 
     elementwise_average = [
         i / j if j != 0 else 0 for i, j in zip(accumulator, file_counts)
@@ -303,6 +300,53 @@ def plot_edits_per_invocation(
     )
 
     return retval
+
+def plot_zero_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> float:
+    """
+    Plots the fraction of experiments with zero ATE difference at each round.
+    
+    Parameters:
+        ax: The axis to plot on.
+        method: The method to plot.
+        points: The number of points to plot.
+        base_path: The base path to the results.
+    """
+
+    accumulator = [0] * points
+    file_count = 0
+
+    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"], "data")
+
+    if not os.path.exists(path):
+        return 0
+
+    for filename in os.listdir(path):
+        if filename.endswith("ate_diff_trajectory.npy"):
+            # Load the list from the file
+            filepath = os.path.join(path, filename)
+            diff_data = np.load(filepath, allow_pickle=True)
+
+            if len(diff_data) < points:
+                diff_data = np.pad(diff_data, (0, points - len(diff_data)), "edge")
+
+            accumulator += (diff_data < 10e-4).astype(int) 
+
+            file_count += 1
+
+    if file_count == 0:
+        return 0
+
+    elementwise_average = accumulator / file_count
+
+    ax.plot(
+        range(len(elementwise_average)),
+        elementwise_average,
+        label=LINE_FORMATTING_DATA[method]["label"],
+        marker=LINE_FORMATTING_DATA[method]["marker"],
+        color=LINE_FORMATTING_DATA[method]["color"],
+    )
+
+    return max(elementwise_average)
 
 
 def wrapup_plot(filename: str, ax: Axes, max_val: float, num_points:int) -> None:
@@ -356,7 +400,7 @@ def plotter(path: str, skip: bool = False):
                 max_y,
                 plot_edit_distance(ax, method, num_points, path),
             )
-        ax.set_ylabel("Graph Edit Distance\nfrom Ground Truth", fontsize=FONTSIZE)
+        ax.set_ylabel("Graph Edit Distance", fontsize=FONTSIZE)
         wrapup_plot(
             os.path.join(plots_path, "edit_distance.png"),
             ax,
@@ -373,7 +417,7 @@ def plotter(path: str, skip: bool = False):
         max_y = 0
         for method in LINE_FORMATTING_DATA:
             max_y = max(max_y, plot_ate_diff(ax, method, num_points, path))
-        ax.set_ylabel("Absolute Relative ATE Error", fontsize=FONTSIZE)
+        ax.set_ylabel("ARE_ATE", fontsize=FONTSIZE)
         wrapup_plot(
             os.path.join(plots_path, "ate_error.png"),
             ax,
@@ -391,7 +435,7 @@ def plotter(path: str, skip: bool = False):
         for method in LINE_FORMATTING_DATA:
             max_y = max(max_y, plot_invocation_duration(ax, method, num_points, path))
 
-        ax.set_ylabel("Invocation Duration (s)", fontsize=FONTSIZE)
+        ax.set_ylabel("Latency (s)", fontsize=FONTSIZE)
         wrapup_plot(
             os.path.join(plots_path, "invocation_duration.png"),
             ax,
@@ -409,9 +453,27 @@ def plotter(path: str, skip: bool = False):
         for method in LINE_FORMATTING_DATA:
             max_y = max(max_y, plot_edits_per_invocation(ax, method, num_points, path))
 
-        ax.set_ylabel("Edits per Invocation", fontsize=FONTSIZE)
+        ax.set_ylabel(r"\# Suggested Edits", fontsize=FONTSIZE)
         wrapup_plot(
             os.path.join(plots_path, "edits_per_invocation.png"),
+            ax,
+            max_y,
+            num_points
+        )
+
+    ### Fraction of experiments with zero ATE difference at that round
+    print("Plotting Fraction of experiments with zero ATE difference...")
+    if skip and os.path.exists(os.path.join(plots_path, "zero_ate_diff.png")):
+        print("Skipping Zero ATE Difference plot")
+    else:
+        _, ax = plt.subplots()
+        max_y = 0
+        for method in LINE_FORMATTING_DATA:
+            max_y = max(max_y, plot_zero_ate_diff(ax, method, num_points, path))
+
+        ax.set_ylabel("Fraction of Experiments with\nZero ARE_ATE", fontsize=FONTSIZE)
+        wrapup_plot(
+            os.path.join(plots_path, "zero_ate_diff.png"),
             ax,
             max_y,
             num_points
