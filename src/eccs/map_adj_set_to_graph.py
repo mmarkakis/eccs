@@ -1,6 +1,8 @@
 import networkx as nx
 
-from .edges import EdgeEditType, EdgeEdit, Path
+from .edges import EdgeEditType, EdgeEdit, Path, Edge
+from typing import Optional
+from collections import deque
 
 
 class MapAdjSetToGraph:
@@ -9,7 +11,13 @@ class MapAdjSetToGraph:
     """
 
     def __init__(
-        self, graph: nx.DiGraph, treatment: str, outcome: str, base_adj_set: list[str]
+        self,
+        graph: nx.DiGraph,
+        treatment: str,
+        outcome: str,
+        fix_list: list[Edge],
+        ban_list: list[Edge],
+        base_adj_set: Optional[list[str]] = None,
     ):
         """
         Initializes the class.
@@ -24,7 +32,64 @@ class MapAdjSetToGraph:
         self.skeleton = graph.to_undirected()
         self.treatment = treatment
         self.outcome = outcome
+        self.fix_list = fix_list
+        self.ban_list = ban_list
         self.base_adj_set = base_adj_set
+
+    def _find_directed_paths(self, src: str, dst: str) -> list[Path]:
+        """
+        Find all directed paths between two nodes in the graph.
+
+        Parameters:
+            src: The source node.
+            dst: The destination node.
+
+        Returns:
+            A list of directed paths.
+        """
+        return list(nx.all_simple_edge_paths(self.graph, src, dst))
+
+    def _break_path_near(self, path: Path, var: str) -> Optional[EdgeEdit]:
+        """
+        Find an edge to remove that will break the path near a variable. The variable
+        has to be the first or last node in the path.
+
+        Parameters:
+            path: The path to break.
+            var: The variable to break the path near.
+
+        Returns:
+            An edge edit that will break the path near the variable.
+        """
+        step = 1
+
+        if var == path[-1][1]:
+            step = -1
+        elif var != path[0][0]:
+            return None
+
+        for edge in path[::step]:
+            if edge not in self.fix_list:
+                return EdgeEdit(edge[0], edge[1], EdgeEditType.REMOVE)
+        return None
+
+    def _find_ordered_descendants(self, v: str) -> list[str]:
+        """
+        Find all descendants of a variable, including itself, and order them by their distance from the variable.
+
+        Parameters:
+            v: The variable.
+
+        Returns:
+            A list of descendants ordered by their distance from the variable.
+        """
+        d = []
+        q = deque([v])
+        while len(q) > 0:
+            current = q.popleft()
+            d.append(current)
+            q.extend([n for n in nx.descendants(self.graph, current) if n not in d])
+        return d
 
     def map_addition(
         self,
@@ -46,44 +111,21 @@ class MapAdjSetToGraph:
         """
 
         if naive:
-            if v in nx.descendants(self.graph, self.treatment):
-                W = [
-                    node
-                    for node in nx.ancestors(self.graph, v)
-                    if node in nx.descendants(self.graph, self.treatment)
-                ]
-                lenW = len(W)
-                # Create all possible sets where each element of W is either FLIPped or REMOVEd
-                l = []
-                for i in range(2**lenW):
-                    flip_mask = bin(i)[2:].zfill(lenW)
-                    edits = [
-                        EdgeEdit(
-                            W[j],
-                            v,
-                            (
-                                EdgeEditType.FLIP
-                                if flip_mask[j] == "1"
-                                else EdgeEditType.REMOVE
-                            ),
-                        )
-                        for j in range(lenW)
-                    ]
-                    edits.extend(
-                        [
-                            EdgeEdit(v, self.treatment, EdgeEditType.ADD),
-                            EdgeEdit(v, self.outcome, EdgeEditType.ADD),
-                        ]
-                    )
-                    l.append(edits)
-                return l
-            else:
-                return [
-                    [
-                        EdgeEdit(v, self.treatment, EdgeEditType.ADD),
-                        EdgeEdit(v, self.outcome, EdgeEditType.ADD),
-                    ]
-                ]
+            e = []
+            if v in nx.descendants(self.graph, self.treatment) or v in nx.descendants(
+                self.graph, self.outcome
+            ):
+                paths = self._find_directed_paths(
+                    self.treatment, v
+                ) + self._find_directed_paths(v, self.outcome)
+                for p in paths:
+                    edit = self._break_path_near(p, v)
+                    if edit is None:
+                        return [[]]
+                    e.append(edit)
+            e.append(EdgeEdit(v, self.treatment, EdgeEditType.ADD))
+            e.append(EdgeEdit(v, self.outcome, EdgeEditType.ADD))
+            return [list(set(e))]
         else:
             l = []
             # Each set of edges in l will be a Python tuple inside this function,
@@ -199,42 +241,24 @@ class MapAdjSetToGraph:
         """
 
         if naive:
+            e = []
             if v in nx.ancestors(self.graph, self.treatment):
-                W = [
-                    node
-                    for node in nx.descendants(self.graph, v)
-                    if node in nx.ancestors(self.graph, self.treatment)
-                ]
-                lenW = len(W)
-                # Create all possible sets where each element of W is either FLIPped or REMOVEd
-                l = []
-                for i in range(2**lenW):
-                    flip_mask = bin(i)[2:].zfill(lenW)
-                    edits = [
-                        EdgeEdit(
-                            v,
-                            W[j],
-                            (
-                                EdgeEditType.FLIP
-                                if flip_mask[j] == "1"
-                                else EdgeEditType.REMOVE
-                            ),
-                        )
-                        for j in range(lenW)
-                    ]
-                    edits.extend(
-                        [
-                            EdgeEdit(self.treatment, v, EdgeEditType.ADD),
-                        ]
-                    )
-                    l.append(edits)
-                return l
-            else:
-                return [
-                    [
-                        EdgeEdit(self.treatment, v, EdgeEditType.ADD),
-                    ]
-                ]
+                paths = self._find_directed_paths(v, self.treatment)
+                for p in paths:
+                    edit = self._break_path_near(p, v)
+                    if edit is None:
+                        return [[]]
+                    e.append(edit)
+
+            ord_desc = self._find_ordered_descendants(self.treatment)
+            for w in ord_desc:
+                if not (w, v) in self.ban_list:
+                    if (v,w) in self.graph.edges:
+                        e.append(EdgeEdit(v, w, EdgeEditType.FLIP))
+                    else:
+                        e.append(EdgeEdit(w, v, EdgeEditType.ADD))
+                    return [list(set(e))]
+            return [[]]
         else:
             l = [tuple()]
             reduced_adj_set = self.base_adj_set.copy()

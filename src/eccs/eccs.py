@@ -613,7 +613,12 @@ class ECCS:
         ]
 
         mapper = MapAdjSetToGraph(
-            self.graph, self.treatment, self.outcome, base_adj_set
+            self.graph,
+            self.treatment,
+            self.outcome,
+            self._edge_states.fixed_list,
+            self._edge_states.ban_list,
+            base_adj_set,
         )
 
         # Try adding each of the addable
