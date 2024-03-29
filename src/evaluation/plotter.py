@@ -250,8 +250,8 @@ def plot_edits_per_invocation(
         The maximum plotted value.
     """
 
-    accumulator = None
-    file_count = 0
+    accumulator = [0] * points
+    file_counts = [0] * points
 
     path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"], "data")
 
@@ -264,22 +264,35 @@ def plot_edits_per_invocation(
             filepath = os.path.join(path, filename)
             data = np.load(filepath)
 
+            for i in range(len(data)):
+                file_counts[i+1] += (1 if data[i] > 0 else 0)
+
             if len(data) < points:
+                orig_len = len(data)
                 data = np.pad(
-                    data, (0, points - len(data)), "constant", constant_values=0
+                    data, (1, points - orig_len - 1), "constant", constant_values=0
                 )
 
             if accumulator is None:
-                accumulator = [float(i) for i in data]
+                accumulator = data
             else:
                 accumulator += data
 
-            file_count += 1
 
-    if file_count == 0:
+    if all(x == 0 for x in file_counts):
         return 0
+    
+    print(accumulator)
+    print(file_counts)
+    
 
-    elementwise_average = accumulator / file_count
+    elementwise_average = [
+        i / j if j != 0 else 0 for i, j in zip(accumulator, file_counts)
+    ]
+
+    retval = max(elementwise_average)
+
+    elementwise_average[0] = None
 
     ax.plot(
         range(len(elementwise_average)),
@@ -289,7 +302,7 @@ def plot_edits_per_invocation(
         color=LINE_FORMATTING_DATA[method]["color"],
     )
 
-    return max(elementwise_average)
+    return retval
 
 
 def wrapup_plot(filename: str, ax: Axes, max_val: float, num_points:int) -> None:
