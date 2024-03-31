@@ -51,38 +51,38 @@ class ATECalculator:
             graph.add_edge(treatment_name, outcome_name)
 
         # Use dowhy to get the ATE, P-value and standard error.
-        with open("/dev/null", "w+") as f:
-            try:
-                with contextlib.redirect_stdout(f), contextlib.redirect_stderr(f):
-                    model = CausalModel(
-                        data=data[list(graph.nodes)],
-                        treatment=treatment_name,
-                        outcome=outcome_name,
-                        graph=graph,
-                    )
-                    identified_estimand = model.identify_effect(
-                        proceed_when_unidentifiable=True
-                    )
-                    estimate = model.estimate_effect(
-                        identified_estimand,
-                        method_name="backdoor.linear_regression",
-                        test_significance=True,
-                    )
-                    p_value = (
-                        estimate.test_stat_significance()["p_value"].astype(float)[0]
-                        if calculate_p_value
-                        else None
-                    )
-                    stderr = (
-                        estimate.get_standard_error() if calculate_std_error else None
-                    )
-                    d = {
-                        "ATE": float(estimate.value),
-                        "P-value": p_value,
-                        "Standard Error": stderr,
-                    }
-                    if get_estimand:
-                        d["Estimand"] = identified_estimand
-                    return d
-            except:
-                raise ValueError
+        # with open("/dev/null", "w+") as f:
+        try:
+            # with contextlib.redirect_stdout(f), contextlib.redirect_stderr(f):
+            model = CausalModel(
+                data=data[list(graph.nodes)],
+                treatment=treatment_name,
+                outcome=outcome_name,
+                graph=graph,
+            )
+            identified_estimand = model.identify_effect(
+                proceed_when_unidentifiable=True
+            )
+            estimate = model.estimate_effect(
+                identified_estimand,
+                method_name="backdoor.linear_regression",
+                test_significance=True,
+            )
+            p_value = (
+                estimate.test_stat_significance()["p_value"].astype(float)[0]
+                if calculate_p_value
+                else None
+            )
+            stderr = (
+                estimate.get_standard_error() if calculate_std_error else None
+            )
+            d = {
+                "ATE": float(estimate.value),
+                "P-value": p_value,
+                "Standard Error": stderr,
+            }
+            if get_estimand:
+                d["Estimand"] = identified_estimand
+            return d
+        except:
+            raise ValueError

@@ -21,7 +21,7 @@ async def main():
     parser.add_argument(
         "--config-path",
         type=str,
-        default="./config.yml",
+        default="./simple_config.yml",
         help="Configuration file path",
     )
     parser.add_argument(

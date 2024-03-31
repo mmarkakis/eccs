@@ -1,9 +1,14 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import dihash
 import heapq
 import math
+# from multiprocessing import Lock, Pool, Process
 import networkx as nx
 import pandas as pd
+import pdb
+from threading import Lock, RLock
 from typing import Any, List, Optional, Tuple
+import warnings
 
 from .ate import ATECalculator
 from .edge_state_matrix import EdgeState, EdgeStateMatrix
@@ -38,15 +43,21 @@ class AStarSearch:
         # TODO: make this code look nicer with edge types (low priority)
         # True is addition False is deletion
         self._predecessors = {}
+        self._ATE_cache_lock = RLock()
         self._ATE_cache = {} # causal graph id -> ATE info
         self._visited = set()
+        self._visited_lock = Lock()
         self._hashtag_to_id = {} # This notes that something is hashed
+        self._hashtag_to_id_lock = Lock()
         self._id_to_graph = {}
+        self._id_to_graph_lock = Lock()
         self._cur_next_id = 0
         self._computational_budget = computational_budget
         self._f_score = {}
         self._g_score = {}
         self._lookahead_threshold = 3
+
+        self._frontier_lock = Lock()
 
         init_ATE_info = self._get_ATE_info(0, init_graph)
         assert 0 in self._ATE_cache
@@ -56,9 +67,15 @@ class AStarSearch:
     
     def _get_ATE_info(self, id: int, graph: nx.DiGraph):
         try:
-            return self._ATE_cache[id]
+            self._ATE_cache_lock.acquire()
+            res = self._ATE_cache[id] # KeyError is handled on this line
+            self._ATE_cache_lock.release()
+            return res
         except KeyError:
+            self._ATE_cache_lock.release()
+            ate = None
             try:
+                # print("trying ate")
                 ate = ATECalculator.get_ate_and_confidence(
                     data=self.data,
                     treatment=str(self.treatment),
@@ -68,15 +85,18 @@ class AStarSearch:
                     calculate_std_error=True,
                     get_estimand=False,
                 )
-                self._ATE_cache[id] = ate
+                # self._ATE_cache[id] = ate
             except ValueError: # Returned by handler of nx.exception.NodeNotFound
                 # Special case of treatment and outcome being not connected
+                # print("handling error")
                 ate = {
                     "ATE": 0,
                     "P-value": 0,
                     "Standard Error": 0
                 }
-                self._ATE_cache[id] = ate
+            self._ATE_cache_lock.acquire()
+            self._ATE_cache[id] = ate
+            self._ATE_cache_lock.release()
             return ate
     
     def _get_potential(self, id: int, graph: nx.DiGraph):
@@ -105,62 +125,101 @@ class AStarSearch:
     def _explore_neighbor(self, current_node_id: int, graph: nx.DiGraph, n1: int, n2: int, frontier: List[Any], n_lookahead: int, is_add: bool) -> Optional[int]:
         # the type of nx node is int unless DiGraph.nodes() was called with data options
         # returns the id of the new neighbor or None if we don't explore
+
+        new_graph = graph.copy()
+        # print("_explore_neighbor", n1, n2, is_add)
+        # breakpoint()
         
-        if not is_add and len(graph.edges()) <= self.n: # Only explore completely connected graphs
+        if not is_add and len(new_graph.edges()) <= self.n: # Only explore completely connected graphs
             return (None, None)
-        if is_add and len(graph.edges()) >= self.n * self.n // 2: # Skip overly connected graphs too
+        if is_add and len(new_graph.edges()) >= self.n * self.n // 2: # Skip overly connected graphs too
             return (None, None)
 
         if is_add:
-            graph.add_edge(n1, n2)
+            new_graph.add_edge(n1, n2)
         else:
-            graph.remove_edge(n1, n2)
+            new_graph.remove_edge(n1, n2)
         hashtag = dihash.hash_graph(
-            graph,
+            new_graph,
             hash_nodes=False,
             apply_quotient=False
         )
+        self._hashtag_to_id_lock.acquire()
         if hashtag not in self._hashtag_to_id: # not seen yet, mark it as seen by storing hash
             self._hashtag_to_id[hashtag] = self._cur_next_id
             self._cur_next_id += 1
-
+            # print(self._cur_next_id)
         id = self._hashtag_to_id[hashtag]
-        ATE_info = self._get_ATE_info(id, graph)
+        self._hashtag_to_id_lock.release()
+
+        ATE_info = self._get_ATE_info(id, new_graph)
 
         # if ATE_info["P-value"] < self.p_value_threshold:
         if ATE_info["Standard Error"] > self.std_err_threshold:
+            self._visited_lock.acquire()
             self._visited.add(id) # discard
+            self._visited_lock.release()
+            self._id_to_graph_lock.acquire()
             if id not in self._id_to_graph:
-                new_graph = graph.copy()
+                # new_graph = graph.copy()
                 self._id_to_graph[id] = new_graph
+            self._id_to_graph_lock.release()
+
             if n_lookahead < self._lookahead_threshold:
+                self._frontier_lock.acquire()
                 f_score = self._f_score.get(id,
-                    self._g_score[current_node_id] - self._get_potential(id, graph))
+                    self._g_score[current_node_id] - self._get_potential(id, new_graph))
                 if id not in self._f_score:
                     self._f_score[id] = f_score
                 if id not in self._g_score:
                     self._g_score[id] = self._g_score[current_node_id]
                 heapq.heappush(frontier, (f_score, id, n_lookahead + 1))
+                self._frontier_lock.release()
 
         result = None
         if id not in self._visited:
             # explore (but not commit to the path, so we don't set the precedessor here)
+            self._id_to_graph_lock.acquire()
             if id not in self._id_to_graph: # store the result of this exploration
-                new_graph = graph.copy()
+                # new_graph = graph.copy()
                 self._id_to_graph[id] = new_graph
+            self._id_to_graph_lock.release()
             result = id
         
         # Revert the change on this graph before finish exploring
-        if is_add:
-            graph.remove_edge(n1, n2)
-        else:
-            graph.add_edge(n1, n2)
+        #if is_add:
+        #    graph.remove_edge(n1, n2)
+        #else:
+        #    graph.add_edge(n1, n2)
         return (result, (n1, n2, is_add))
     
     def _get_neighbors(self, current_node_id: int, frontier: List[Any], n_lookahead: int) -> List[Tuple[int, Tuple[int, int, bool]]]:
         # Returns list of neighbors
         graph: nx.DiGraph = self._id_to_graph[current_node_id]
         results = []
+        results_lock = Lock()
+
+        def _get_one_neighbor(n1, n2, is_add):
+            # print("_get_one_neighbor", n1, n2, is_add)
+            nonlocal results
+            neighbor_res = None
+            if graph.has_edge(n1, n2) and not self.edge_states.is_edge_fixed(n1, n2) and not is_add:
+                neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=False)
+            elif n2 in nx.ancestors(graph, n1):
+                # print("cancelling", n1, n2, is_add)
+                return  # Adding this edge his creates a cycle
+            elif not self.edge_states.is_edge_banned(n1, n2) and is_add:
+                neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=True)
+            else:
+                # print("cancelling", n1, n2, is_add)
+                pass
+            if neighbor_res is not None and neighbor_res[0] is not None:
+                results_lock.acquire()
+                results.append(neighbor_res)
+                results_lock.release()
+            # print("finishing", n1, n2, is_add)
+        
+        """
         for n1 in list(graph.nodes):
             for n2 in list(graph.nodes):
                 if n2 == n1:
@@ -174,6 +233,20 @@ class AStarSearch:
                     neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=True)
                 if neighbor_res[0] is not None:
                     results.append(neighbor_res)
+        """
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for n1 in list(graph.nodes):
+                for n2 in list(graph.nodes):
+                    if n2 == n1:
+                        continue  # skip self-loops
+                    # print("submitting", n1, n2)
+                    futures.append(executor.submit(_get_one_neighbor, n1, n2, True))
+                    futures.append(executor.submit(_get_one_neighbor, n1, n2, False))
+            # print("submitted everything")
+            # breakpoint()
+            for future in as_completed(futures):
+                future.result()
         
         return results
 
@@ -208,46 +281,47 @@ class AStarSearch:
         self._g_score[0] = self._f_score[0]
 
         top_k_candidates = []
-
-        while frontier:
-            _, current_node_id, n_lookahead = heapq.heappop(frontier)
-            self._visited.add(current_node_id)
-            heapq.heappush(top_k_candidates, (self._get_potential(current_node_id, self._id_to_graph[current_node_id]), current_node_id))
-            if len(top_k_candidates) > k:
-                heapq.heappop(top_k_candidates)
-            neighbors = self._get_neighbors(current_node_id, frontier, n_lookahead)
-            if self._cur_next_id > self._computational_budget:
-                break
-            for neighbor_id, edge_type in neighbors:
-                # when expanding neighbors, just discard ones that are too low p-value
-                tentative_g_score = self._g_score[current_node_id]
-                neighbor_g_score = self._g_score.get(neighbor_id, self._init_potential - self._get_potential(neighbor_id, self._id_to_graph[neighbor_id]))
-                if tentative_g_score <= neighbor_g_score:
-                    self._predecessors[neighbor_id] = (current_node_id, edge_type)
-                    self._g_score[neighbor_id] = tentative_g_score
-                    # f_score[neighbor_id] = tentative_g_score + self.heuristic(neighbor)
-                    self._f_score[neighbor_id] = tentative_g_score - self._get_potential(neighbor_id, self._id_to_graph[neighbor_id])
-                    heapq.heappush(frontier, (self._f_score[neighbor_id], neighbor_id, 0))
-
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            while frontier:
+                _, current_node_id, n_lookahead = heapq.heappop(frontier)
+                self._visited.add(current_node_id)
+                heapq.heappush(top_k_candidates, (self._get_potential(current_node_id, self._id_to_graph[current_node_id]), current_node_id))
+                if len(top_k_candidates) > k:
+                    heapq.heappop(top_k_candidates)
+                neighbors = self._get_neighbors(current_node_id, frontier, n_lookahead)
                 if self._cur_next_id > self._computational_budget:
                     break
-        
-        edge_tally = {}
-        
-        for p in top_k_candidates:
-            c_id = p[1]
-            initial_c_id = p[1]
-            while c_id in self._predecessors:
-                c_id, (n1, n2, _) = self._predecessors[c_id]
-                if (n1, n2) not in edge_tally:
-                    edge_tally[(n1, n2)] = (1, abs(self._ATE_cache[initial_c_id]["ATE"] - self.ATE_init))
-                else:
-                    cnt = edge_tally[(n1, n2)][0] + 1
-                    total_diff = edge_tally[(n1, n2)][1] + abs(self._ATE_cache[initial_c_id]["ATE"] - self.ATE_init)
-                    edge_tally[(n1, n2)] = (cnt, total_diff)
-        
-        sorted_edges = sorted(edge_tally.items(), key=lambda x:x[1][0], reverse=True)
-        print("The top 10 edges are")
-        print(sorted_edges[:10])
+                for neighbor_id, edge_type in neighbors:
+                    # when expanding neighbors, just discard ones that are too low p-value
+                    tentative_g_score = self._g_score[current_node_id]
+                    neighbor_g_score = self._g_score.get(neighbor_id, self._init_potential - self._get_potential(neighbor_id, self._id_to_graph[neighbor_id]))
+                    if tentative_g_score <= neighbor_g_score:
+                        self._predecessors[neighbor_id] = (current_node_id, edge_type)
+                        self._g_score[neighbor_id] = tentative_g_score
+                        # f_score[neighbor_id] = tentative_g_score + self.heuristic(neighbor)
+                        self._f_score[neighbor_id] = tentative_g_score - self._get_potential(neighbor_id, self._id_to_graph[neighbor_id])
+                        heapq.heappush(frontier, (self._f_score[neighbor_id], neighbor_id, 0))
+
+                    if self._cur_next_id > self._computational_budget:
+                        break
+            
+            edge_tally = {}
+            
+            for p in top_k_candidates:
+                c_id = p[1]
+                initial_c_id = p[1]
+                while c_id in self._predecessors:
+                    c_id, (n1, n2, _) = self._predecessors[c_id]
+                    if (n1, n2) not in edge_tally:
+                        edge_tally[(n1, n2)] = (1, abs(self._ATE_cache[initial_c_id]["ATE"] - self.ATE_init))
+                    else:
+                        cnt = edge_tally[(n1, n2)][0] + 1
+                        total_diff = edge_tally[(n1, n2)][1] + abs(self._ATE_cache[initial_c_id]["ATE"] - self.ATE_init)
+                        edge_tally[(n1, n2)] = (cnt, total_diff)
+            
+            sorted_edges = sorted(edge_tally.items(), key=lambda x:x[1][0], reverse=True)
+            print("The top 10 edges are")
+            print(sorted_edges[:10])
 
         return sorted_edges#
