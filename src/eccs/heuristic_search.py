@@ -42,6 +42,9 @@ class AStarSearch:
             self.init_graph.nodes
         ):  # This is some hacky code to make it work with graph hashing
             self.init_graph.nodes[n]["label"] = self.init_graph.nodes[n]["var_name"]
+        #print("Init graph:", self.init_graph.edges())
+        #print("Treatment:", treatment)
+        #print("Outcome", outcome)
         self.treatment = treatment
         self.outcome = outcome
         self.data = data
@@ -127,23 +130,16 @@ class AStarSearch:
         # {"ATE": float, "P-value": float, "Standard Error": float, "Estimand": ?}
         # TODO: what is the type of Estimand
         ATE_info = self._get_ATE_info(id, graph)
-        # The math.inf stops graphs where treatment and outcome are not direct connected
-        if False:
-            stderr = 0
-            if ATE_info["Standard Error"] == 0:
-                stderr = 1
-            else:
-                try:
-                    stderr = ATE_info["Standard Error"][0]
-                except IndexError:
-                    stderr = ATE_info["Standard Error"]
-
-        return (
-            ATE_info["ATE"]
-            # - self.gamma_1 * stderr
-            + ATE_info["P-value"]
-            + 0.01 * abs(len(graph.edges()) - self.m * 2)
-        )  # TODO: 2 is a guess of average degree
+         # The math.inf stops graphs where treatment and outcome are not direct connected
+        stderr = 0
+        if ATE_info["Standard Error"] == 0:
+            stderr = 1
+        else:
+            try:
+                stderr = ATE_info["Standard Error"][0]
+            except IndexError:
+                stderr = ATE_info["Standard Error"]
+        return ATE_info["ATE"] - self.gamma_1 * stderr + ATE_info["P-value"] + 0.01 * abs(len(graph.edges()) - self.m * 2) # TODO: 2 is a guess of average degree
 
     def _explore_neighbor(
         self,

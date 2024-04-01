@@ -87,7 +87,7 @@ class ATECalculator:
             )
             timings.append(datetime.now())
             stderr = (
-                estimate.get_standard_error() if calculate_std_error else None
+                estimate.get_standard_error({'num_simulations': bootstrap_reps, 'sample_size_fraction': bootstrap_fraction}) if calculate_std_error else None
             )
             timings.append(datetime.now())
             d = {

@@ -1,3 +1,4 @@
+dihash>=2.1
 dowhy>=0.11.1
 gurobipy>=11.0.0
 ipykernel>=6.29.2
