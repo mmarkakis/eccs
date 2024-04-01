@@ -5,9 +5,10 @@ import networkx as nx
 from networkx.algorithms.d_separation import minimal_d_separator
 from .ate import ATECalculator
 from .edge_state_matrix import EdgeState, EdgeStateMatrix
-from .edits import EdgeEditType, EdgeEdit
+from .edges import EdgeEditType, EdgeEdit
 from .graph_renderer import GraphRenderer
 from .heuristic_search import AStarSearch
+from .map_adj_set_to_graph import MapAdjSetToGraph
 
 from itertools import combinations
 from tqdm.auto import tqdm
@@ -23,6 +24,7 @@ class ECCS:
     EDGE_SUGGESTION_METHODS = [
         "best_single_edge_change",
         "best_single_adjustment_set_change",
+        "best_single_adjustment_set_change_naive",
         "astar_single_edge_change",
         "random_single_edge_change",
     ]
@@ -43,20 +45,36 @@ class ECCS:
             self._data = data
 
         self._num_vars = self._data.shape[1]
-        self._edge_decisions_matrix = EdgeStateMatrix(list(self._data.columns))
+        self._edge_states = EdgeStateMatrix(list(self._data.columns))
 
         # Load graph appropriately
         if isinstance(graph, str):
-            self._graph = nx.DiGraph(nx.nx_pydot.read_dot(graph))
-        else:
-            self._graph = graph
-        graph.add_nodes_from((n, {"var_name": n}) for n in graph.nodes)
+            graph = nx.DiGraph(nx.nx_pydot.read_dot(graph))
+
+        self._graph = nx.DiGraph()
+        self._graph.add_nodes_from((n, {"var_name": n}) for n in graph.nodes)
         for edge in graph.edges():
             self.add_edge(edge[0], edge[1])
 
         # Ban self edges.
         for i in range(self._num_vars):
             self.ban_edge(self._data.columns[i], self._data.columns[i])
+
+        print("Initialized ECCS!")
+        print(
+            f"The graph has {self._graph.number_of_nodes()} nodes and {self._graph.number_of_edges()} edges."
+        )
+        num_fixed_edges = len(self._edge_states.fixed_list)
+        num_banned_edges = len(self._edge_states.ban_list)
+        print(
+            f"Of the {self._graph.number_of_edges()} edges in the graph, {num_fixed_edges} are fixed."
+        )
+        print(
+            f"Of the {self._num_vars**2 - self._graph.number_of_edges()} edges not in the graph, {num_banned_edges} are banned."
+        )
+        print(
+            f"The number of modifiable edges is {self._num_vars**2 - num_fixed_edges - num_banned_edges}."
+        )
 
     def set_treatment(self, treatment: str) -> None:
         """
@@ -90,7 +108,7 @@ class ECCS:
         """
         Returns the banlist as a dataframe, except for self edges
         """
-        banlist = self._edge_decisions_matrix.ban_list
+        banlist = self._edge_states.ban_list
         banlist_df = pd.DataFrame(banlist, columns=["Source", "Destination"])
         banlist_df = banlist_df[banlist_df["Source"] != banlist_df["Destination"]]
         return banlist_df
@@ -157,12 +175,11 @@ class ECCS:
             self.treatment in graph.nodes  # It includes the treatment.
             and self.outcome in graph.nodes  # It includes the outcome.
             and all(  # It includes no banned edges.
-                not self._edge_decisions_matrix.is_edge_banned(src, dst)
+                not self._edge_states.is_edge_banned(src, dst)
                 for src, dst in graph.edges
             )
             and all(  # It includes all fixed edges.
-                graph.has_edge(src, dst)
-                for src, dst in self._edge_decisions_matrix.fixed_list
+                graph.has_edge(src, dst) for src, dst in self._edge_states.fixed_list
             )
             and nx.has_path(  # There is a directed path from the treatment to the outcome.
                 graph, self.treatment, self.outcome
@@ -187,7 +204,7 @@ class ECCS:
         """
         Display the current graph.
         """
-        GraphRenderer.display_graph(self._graph, self._edge_decisions_matrix)
+        GraphRenderer.display_graph(self._graph, self._edge_states)
 
     def draw_graph(self) -> str:
         """
@@ -196,7 +213,7 @@ class ECCS:
         Returns:
             A base64-encoded string representation of the graph.
         """
-        return GraphRenderer.draw_graph(self._graph, self._edge_decisions_matrix)
+        return GraphRenderer.draw_graph(self._graph, self._edge_states)
 
     def save_graph(self, filename: str) -> None:
         """
@@ -205,7 +222,7 @@ class ECCS:
         Parameters:
             filename: The name of the file to save to.
         """
-        GraphRenderer.save_graph(self._graph, self._edge_decisions_matrix, filename)
+        GraphRenderer.save_graph(self._graph, self._edge_states, filename)
 
     def add_edge(self, src: str, dst: str, is_suggested: bool = False) -> None:
         """
@@ -218,12 +235,12 @@ class ECCS:
             is_suggested: Whether the edge addition is suggested by the system, as opposed
                 to being manually added by the user.
         """
-        if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.ABSENT):
+        if self._edge_states.is_edge_in_state(src, dst, EdgeState.ABSENT):
             self._graph.add_node(src, var_name=src)
             self._graph.add_node(dst, var_name=dst)
             self._graph.add_edge(src, dst)
             target_state = EdgeState.SUGGESTED if is_suggested else EdgeState.PRESENT
-            self._edge_decisions_matrix.mark_edge(src, dst, target_state)
+            self._edge_states.mark_edge(src, dst, target_state)
 
     def remove_edge(self, src: str, dst: str, remove_isolates: bool = True) -> None:
         """
@@ -235,15 +252,26 @@ class ECCS:
             dst: The name of the destination variable.
             remove_isolates: Whether to remove any nodes with degree zero after removing the edge.
         """
-        if self._edge_decisions_matrix.is_edge_in_state(
+        if self._edge_states.is_edge_in_state(
             src, dst, EdgeState.PRESENT
-        ) or self._edge_decisions_matrix.is_edge_in_state(
-            src, dst, EdgeState.SUGGESTED
-        ):
+        ) or self._edge_states.is_edge_in_state(src, dst, EdgeState.SUGGESTED):
             self._graph.remove_edge(src, dst)
             if remove_isolates:
                 self._graph.remove_nodes_from(list(nx.isolates(self._graph)))
-            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.ABSENT)
+            self._edge_states.mark_edge(src, dst, EdgeState.ABSENT)
+
+    def get_edge_state(self, src: str, dst: str) -> EdgeState:
+        """
+        Get the state of an edge.
+
+        Parameters:
+            src: The name of the source variable.
+            dst: The name of the destination variable.
+
+        Returns:
+            The state of the edge.
+        """
+        return self._edge_states.get_edge_state(src, dst)
 
     def fix_edge(self, src: str, dst: str) -> None:
         """
@@ -255,9 +283,9 @@ class ECCS:
             dst: The name of the destination variable.
         """
 
-        if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.PRESENT):
-            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.FIXED)
-            self._edge_decisions_matrix.mark_edge(dst, src, EdgeState.BANNED)
+        if self._edge_states.is_edge_in_state(src, dst, EdgeState.PRESENT):
+            self._edge_states.mark_edge(src, dst, EdgeState.FIXED)
+            self._edge_states.mark_edge(dst, src, EdgeState.BANNED)
 
     def ban_edge(self, src: str, dst: str) -> None:
         """
@@ -268,8 +296,8 @@ class ECCS:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.ABSENT):
-            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.BANNED)
+        if self._edge_states.is_edge_in_state(src, dst, EdgeState.ABSENT):
+            self._edge_states.mark_edge(src, dst, EdgeState.BANNED)
 
     def unban_edge(self, src: str, dst: str) -> None:
         """
@@ -279,12 +307,10 @@ class ECCS:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        if self._edge_decisions_matrix.is_edge_in_state(
+        if self._edge_states.is_edge_in_state(
             src, dst, EdgeState.BANNED
-        ) and not self._edge_decisions_matrix.is_edge_in_state(
-            dst, src, EdgeState.FIXED
-        ):
-            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.ABSENT)
+        ) and not self._edge_states.is_edge_in_state(dst, src, EdgeState.FIXED):
+            self._edge_states.mark_edge(src, dst, EdgeState.ABSENT)
 
     def unfix_edge(self, src: str, dst: str) -> None:
         """
@@ -294,9 +320,9 @@ class ECCS:
             src: The name of the source variable.
             dst: The name of the destination variable.
         """
-        if self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.FIXED):
-            self._edge_decisions_matrix.mark_edge(src, dst, EdgeState.PRESENT)
-            self._edge_decisions_matrix.mark_edge(dst, src, EdgeState.ABSENT)
+        if self._edge_states.is_edge_in_state(src, dst, EdgeState.FIXED):
+            self._edge_states.mark_edge(src, dst, EdgeState.PRESENT)
+            self._edge_states.mark_edge(dst, src, EdgeState.ABSENT)
 
     def is_edge_fixed(self, src: str, dst: str) -> bool:
         """
@@ -309,7 +335,7 @@ class ECCS:
         Returns:
             True if the edge is fixed, False otherwise.
         """
-        return self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.FIXED)
+        return self._edge_states.is_edge_in_state(src, dst, EdgeState.FIXED)
 
     def is_edge_banned(self, src: str, dst: str) -> bool:
         """
@@ -322,7 +348,7 @@ class ECCS:
         Returns:
             True if the edge is banned, False otherwise.
         """
-        return self._edge_decisions_matrix.is_edge_in_state(src, dst, EdgeState.BANNED)
+        return self._edge_states.is_edge_in_state(src, dst, EdgeState.BANNED)
 
     def get_ate(
         self,
@@ -376,7 +402,9 @@ class ECCS:
         if method == "best_single_edge_change":
             return self._suggest_best_single_edge_change()
         elif method == "best_single_adjustment_set_change":
-            return self._suggest_best_single_adjustment_set_addition()
+            return self._suggest_best_single_adjustment_set_change(naive=False)
+        elif method == "best_single_adjustment_set_change_naive":
+            return self._suggest_best_single_adjustment_set_change(naive=True)
         elif method == "random_single_edge_change":
             return self._suggest_random_single_edge_change()
         elif method == "astar_single_edge_change":
@@ -398,18 +426,29 @@ class ECCS:
 
         # Edit graph
         for src, dst, edit_type in edits:
+            print("Applying edit: ", src, dst, edit_type)
             if edit_type == EdgeEditType.ADD:
-                graph.add_edge(src, dst)
+                if not graph.has_edge(src, dst):
+                    graph.add_edge(src, dst)
             elif edit_type == EdgeEditType.REMOVE:
-                graph.remove_edge(src, dst)
+                if graph.has_edge(src, dst):
+                    graph.remove_edge(src, dst)
             elif edit_type == EdgeEditType.FLIP:
-                graph.remove_edge(src, dst)
-                graph.add_edge(dst, src)
+                if graph.has_edge(src, dst):
+                    graph.remove_edge(src, dst)
+                if not graph.has_edge(dst, src):
+                    graph.add_edge(dst, src)
+
+        print("Applied edits successfully")
 
         # Compute the ATE if the graph is acceptable
         if self._is_acceptable(graph):
-            return self.get_ate(graph, self.treatment, self.outcome)
+            print("Graph is acceptable after edits: ", edits)
+            ate = self.get_ate(graph, self.treatment, self.outcome)
+            print("Got back ATE: ", ate)
+            return ate
 
+        print("Graph is not acceptable after edits: ", edits)
         return None
 
     def _edit_and_draw(self, edits: list[EdgeEdit]) -> Optional[str]:
@@ -423,7 +462,7 @@ class ECCS:
         """
 
         graph = self._graph.copy()
-        edge_decisions_matrix = self._edge_decisions_matrix.copy()
+        edge_decisions_matrix = self._edge_states.copy()
 
         # Edit graph
         for src, dst, edit_type in edits:
@@ -482,8 +521,8 @@ class ECCS:
             e2 = self._data.columns[j]
 
             # Extract edge states
-            f_state = self._edge_decisions_matrix.get_edge_state(e1, e2)
-            r_state = self._edge_decisions_matrix.get_edge_state(e2, e1)
+            f_state = self.get_edge_state(e1, e2)
+            r_state = self.get_edge_state(e2, e1)
 
             # Apply the change and evaluate the ATE
             if f_state == EdgeState.ABSENT and (
@@ -527,21 +566,24 @@ class ECCS:
             A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
         a_star = AStarSearch(
-            self._graph, self._treatment_idx, self._outcome_idx.self._data
+            self._graph, self._treatment, self._outcome, self._data, self._edge_states
         )
-        return a_star.astar()  ## TODO: Enforce correct return type
+        edits = a_star.astar()
+        return (edits, self._edit_and_get_ate(edits))
 
     def _suggest_best_single_adjustment_set_change(
-        self,
+        self, naive: bool
     ) -> Tuple[list[EdgeEdit], float]:
         """
         Suggest the best_single_adjustment_set_changes that maximally changes the ATE.
 
-        Changes are translated to edge changes in a rudimentary manner.
+        Parameters:
+            naive: Whether to use the naive approach for translating adjustment sets to graph edits.
 
         Returns:
             A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
+        print("Suggesting best single adjustment set change")
         base_ate = self.get_ate()
         furthest_ate = self.get_ate()
         best_ate_diff = 0
@@ -563,28 +605,43 @@ class ECCS:
         base_adj_set = nx.algorithms.minimal_d_separator(
             self._graph, self.treatment, self.outcome
         )
+        print("Found base adjustment set: ", base_adj_set)
         vars_not_in_adj_set = [
             v
             for v in self.vars
             if v not in base_adj_set and v != self.treatment and v != self.outcome
         ]
 
+        mapper = MapAdjSetToGraph(
+            self.graph,
+            self.treatment,
+            self.outcome,
+            self._edge_states.fixed_list,
+            self._edge_states.ban_list,
+            base_adj_set,
+        )
+
         # Try adding each of the addable
         for v in vars_not_in_adj_set:
-            edits = [
-                EdgeEdit(v, self.treatment, EdgeEditType.ADD),
-                EdgeEdit(v, self.outcome, EdgeEditType.ADD),
-            ]
-            ate = self._edit_and_get_ate(edits, base_ate, best_ate_diff)
-            maybe_update_best(ate, edits)
+            print(f"Trying to add {v} to the adjustment set")
+            edit_lists = mapper.map_addition(v, naive=naive)
+            print("Got back edit list for addition: ", edit_lists)
+            for edit_list in edit_lists:
+                print("A possible set of edits would be: ", edit_list)
+                ate = self._edit_and_get_ate(edit_list)
+                maybe_update_best(ate, edit_list)
 
         # Try removing each of the removable
         for v in base_adj_set:
-            edits = [
-                EdgeEdit(self.treatment, v, EdgeEditType.ADD),
-            ]
-            ate = self._edit_and_get_ate(edits, base_ate, best_ate_diff)
-            maybe_update_best(ate, edits)
+            print(f"Trying to remove {v} from the adjustment set")
+            edit_lists = mapper.map_removal(v, naive=naive)
+            print("Got back edit lists for removal: ", edit_lists)
+            for edit_list in edit_lists:
+                print("A possible set of edits would be: ", edit_list)
+                ate = self._edit_and_get_ate(edit_list)
+                maybe_update_best(ate, edit_list)
+
+        print("Done evaluating options")
 
         return (best_edits, furthest_ate)
 
@@ -598,54 +655,30 @@ class ECCS:
             A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
 
-        while True:
-            # Pick edge endpoints at random
-            i = np.random.randint(self._num_vars)
-            j = np.random.randint(self._num_vars)
+        # Derive the set of editable edges
+        eligible_pairs = list(combinations(range(self._num_vars), 2))
+        eligible_edges = [
+            (self._data.columns[i], self._data.columns[j]) for i, j in eligible_pairs
+        ]
+        eligible_edges = [
+            (src, dst)
+            for src, dst in eligible_edges
+            if src != dst  # Don't toggle self-edges
+            and not self.is_edge_fixed(src, dst)  # Don't touch fixed edges
+            and not self.is_edge_fixed(
+                dst, src
+            )  # No point toggling if reverse is fixed.
+            and not self.is_edge_banned(src, dst)  # Don't touch banned edges
+        ]
 
-            if i == j:
-                continue
-
-            # Extract edge endpoints
-            e1 = self._data.columns[i]
-            e2 = self._data.columns[j]
-
-            # Extract edge states
-            f_state = self._edge_decisions_matrix.get_edge_state(e1, e2)
-            r_state = self._edge_decisions_matrix.get_edge_state(e2, e1)
-
-            if (
-                f_state == EdgeState.FIXED
-                or r_state == EdgeState.FIXED
-                or (f_state == EdgeState.BANNED and r_state == EdgeState.BANNED)
-            ):
-                continue
+        while len(eligible_edges) > 0:
+            e1, e2 = eligible_edges.pop(np.random.randint(len(eligible_edges)))
 
             edit = ()
-
-            if f_state == EdgeState.BANNED:
-                # Toggle the state of the inverse edge
-                if r_state == EdgeState.ABSENT:
-                    edit = EdgeEdit(e2, e1, EdgeEditType.ADD)
-                else:
-                    edit = EdgeEdit(e2, e1, EdgeEditType.REMOVE)
-
-            if r_state == EdgeState.BANNED:
-                # Toggle the state of the forward edge
-                if f_state == EdgeState.ABSENT:
-                    edit = EdgeEdit(e1, e2, EdgeEditType.ADD)
-                else:
-                    edit = EdgeEdit(e1, e2, EdgeEditType.REMOVE)
-
-            # At this point neither is fixed and neither is banned.
-            if f_state == EdgeState.PRESENT:
-                edit = EdgeEdit(e1, e2, EdgeEditType.REMOVE)
-            elif r_state == EdgeState.PRESENT:
-                edit = EdgeEdit(e2, e1, EdgeEditType.REMOVE)
-            elif np.random.choice([True, False]):
+            if self.get_edge_state(e1, e2) == EdgeState.ABSENT:
                 edit = EdgeEdit(e1, e2, EdgeEditType.ADD)
             else:
-                edit = EdgeEdit(e2, e1, EdgeEditType.ADD)
+                edit = EdgeEdit(e1, e2, EdgeEditType.REMOVE)
 
             ate = self._edit_and_get_ate([edit])
 

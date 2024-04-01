@@ -8,22 +8,40 @@ from typing import Any, List, Optional, Tuple
 import warnings
 
 from .ate import ATECalculator
-from .edge_state_matrix import EdgeStateMatrix
+from .edge_state_matrix import EdgeState, EdgeStateMatrix
+from .edges import EdgeEditType, EdgeEdit
+from datetime import datetime
+import sys
+
 
 class AStarSearch:
-    def __init__(self, init_graph: nx.DiGraph, treatment: int, outcome: int, data: pd.DataFrame, edge_states: Optional[EdgeStateMatrix]=None, gamma_1: float=2, gamma_2: float=0.5, p_value_threshold: float=0.5, std_err_threshold: float=0.01, computational_budget: int=1000, bootstrap_reps=10, bootstrap_fraction=0.1):
+    def __init__(
+        self,
+        init_graph: nx.DiGraph,
+        treatment: str,
+        outcome: str,
+        data: pd.DataFrame,
+        edge_states: Optional[EdgeStateMatrix] = None,
+        gamma_1: float = 2,
+        gamma_2: float = 0.5,
+        p_value_threshold: float = 0.5,
+        std_err_threshold: float = 0.01,
+        computational_budget: int = 1000,
+        bootstrap_reps=10,
+        bootstrap_fraction=0.1
+    ):
         # n is the number of causal variables
         # m is the number of edges in the initial graph
         print("Initializing A star")
         self.m = len(init_graph.edges())
         self.n = len(init_graph.nodes())
         self.init_graph = init_graph
-        print("Initial graph:")
-        print(self.init_graph.edges())
-        print("Treatment: ", treatment)
-        print("Outcome: ", outcome)
-        for n in self.init_graph.nodes: # This is some hacky code to make it work with graph hashing
-            self.init_graph.nodes[n]['label'] = self.init_graph.nodes[n]['var_name']
+        for (
+            n
+        ) in (
+            self.init_graph.nodes
+        ):  # This is some hacky code to make it work with graph hashing
+            self.init_graph.nodes[n]["label"] = self.init_graph.nodes[n]["var_name"]
         self.treatment = treatment
         self.outcome = outcome
         self.data = data
@@ -33,8 +51,8 @@ class AStarSearch:
         self.std_err_threshold = std_err_threshold
         self.bootstrap_reps = bootstrap_reps
         self.bootstrap_fraction = bootstrap_fraction
-        if edge_states is None: # backwards compatibility
-            self.edge_states = EdgeStateMatrix([f'{i}' for i in range(self.n)])
+        if edge_states is None:  # backwards compatibility
+            self.edge_states = EdgeStateMatrix(list(self.data.columns))
         else:
             self.edge_states = edge_states
 
@@ -63,7 +81,7 @@ class AStarSearch:
         self.ATE_init = init_ATE_info["ATE"]
         self._init_potential = self._get_potential(0, init_graph)
         print("Initialization finished")
-    
+
     def _get_ATE_info(self, id: int, graph: nx.DiGraph):
         try:
             self._ATE_cache_lock.acquire()
@@ -76,14 +94,15 @@ class AStarSearch:
             try:
                 ate = ATECalculator.get_ate_and_confidence(
                     data=self.data,
-                    treatment=str(self.treatment),
-                    outcome=str(self.outcome),
+                    treatment=self.treatment,
+                    outcome=self.outcome,
                     graph=graph,
                     calculate_p_value=True,
-                    calculate_std_error=False, # Try no std error
+                    calculate_std_error=True, # Try no std error
                     get_estimand=False,
                     bootstrap_reps=self.bootstrap_reps,
                     bootstrap_fraction=self.bootstrap_fraction,
+                    print_timing_info=False,
                 )
                 ate["Standard Error"] = 0
             except ValueError: # Returned by handler of nx.exception.NodeNotFound
@@ -97,7 +116,7 @@ class AStarSearch:
             self._ATE_cache[id] = ate
             self._ATE_cache_lock.release()
             return ate
-    
+
     def _get_potential(self, id: int, graph: nx.DiGraph):
         """
         v is a (id: int, corresponding causal graph: nx.DiGraph)
@@ -109,18 +128,33 @@ class AStarSearch:
         # TODO: what is the type of Estimand
         ATE_info = self._get_ATE_info(id, graph)
         # The math.inf stops graphs where treatment and outcome are not direct connected
-        stderr = 0
-        if ATE_info["Standard Error"] == 0:
-            stderr = 1
-        else:
-            try:
-                stderr = ATE_info["Standard Error"][0]
-            except IndexError:
-                stderr = ATE_info["Standard Error"]
+        if False:
+            stderr = 0
+            if ATE_info["Standard Error"] == 0:
+                stderr = 1
+            else:
+                try:
+                    stderr = ATE_info["Standard Error"][0]
+                except IndexError:
+                    stderr = ATE_info["Standard Error"]
 
-        return ATE_info["ATE"] - self.gamma_1 * stderr + ATE_info["P-value"] + 0.01 * abs(len(graph.edges()) - self.m * 2) # TODO: 2 is a guess of average degree
+        return (
+            ATE_info["ATE"]
+            # - self.gamma_1 * stderr
+            + ATE_info["P-value"]
+            + 0.01 * abs(len(graph.edges()) - self.m * 2)
+        )  # TODO: 2 is a guess of average degree
 
-    def _explore_neighbor(self, current_node_id: int, graph: nx.DiGraph, n1: int, n2: int, frontier: List[Any], n_lookahead: int, is_add: bool) -> Optional[int]:
+    def _explore_neighbor(
+        self,
+        current_node_id: int,
+        graph: nx.DiGraph,
+        n1: int,
+        n2: int,
+        frontier: List[Any],
+        n_lookahead: int,
+        is_add: bool,
+    ) -> Optional[int]:
         # the type of nx node is int unless DiGraph.nodes() was called with data options
         # returns the id of the new neighbor or None if we don't explore
 
@@ -180,10 +214,11 @@ class AStarSearch:
                 self._id_to_graph[id] = new_graph
             self._id_to_graph_lock.release()
             result = id
-        
         return (result, (n1, n2, is_add))
-    
-    def _get_neighbors(self, current_node_id: int, frontier: List[Any], n_lookahead: int) -> List[Tuple[int, Tuple[int, int, bool]]]:
+
+    def _get_neighbors(
+        self, current_node_id: int, frontier: List[Any], n_lookahead: int
+    ) -> List[Tuple[int, Tuple[int, int, bool]]]:
         # Returns list of neighbors
         graph: nx.DiGraph = self._id_to_graph[current_node_id]
         results = []
@@ -213,9 +248,8 @@ class AStarSearch:
                     futures.append(executor.submit(_get_one_neighbor, n1, n2, False))
             for future in as_completed(futures):
                 future.result()
-        
-        return results
 
+        return results
 
     def heuristic(self, predecessor, node):
         # predecessor was taken from the frontier pq, node is the candidate for expansion
@@ -225,23 +259,27 @@ class AStarSearch:
         # estimate of the cost from here to the destination. To be admissible, h(n) cannot overestimate the true
         # value. Therefore, we use -Phi(v2) as an estimate for now.
         # g(n) = Phi(init) - Phi(current frontier of the path)
-        return self._init_potential - self._get_potential(predecessor) - self._get_potential(node)
+        return (
+            self._init_potential
+            - self._get_potential(predecessor)
+            - self._get_potential(node)
+        )
 
-    def astar(self, k: int=100):
+    def astar(self, k: int = 100):
         # Side effect: prints the top 10 result
         # Returns the most frequently seen edge flips in sorted order
-        frontier = [(0, self._cur_next_id, 0)] # this is the pq (f(v), v), only store the ID
+        frontier = [
+            (0, self._cur_next_id, 0)
+        ]  # this is the pq (f(v), v), only store the ID
         self._cur_next_id += 1
 
         start_hash = dihash.hash_graph(
-            self.init_graph,
-            hash_nodes=False,
-            apply_quotient=False
+            self.init_graph, hash_nodes=False, apply_quotient=False
         )
         self._hashtag_to_id[start_hash] = 0
         self._id_to_graph[0] = self.init_graph
         # starting node always has id 0
-        self._f_score[0] =  - self._get_potential(0, self.init_graph)
+        self._f_score[0] = -self._get_potential(0, self.init_graph)
         # g_score[0] = self._init_potential + f_score[0]
         self._g_score[0] = self._f_score[0]
 
@@ -257,6 +295,11 @@ class AStarSearch:
                     heapq.heappop(top_k_candidates)
                 neighbors = self._get_neighbors(current_node_id, frontier, n_lookahead)
                 if self._cur_next_id > self._computational_budget:
+                    print(
+                        "Out of computational budget: ",
+                        self._cur_next_id,
+                        self._computational_budget,
+                    )
                     break
                 for neighbor_id, edge_type in neighbors:
                     assert(neighbor_id != current_node_id)
@@ -292,4 +335,12 @@ class AStarSearch:
             print("The top 10 edges are")
             print(sorted_edges[:10])
 
-        return sorted_edges#
+        
+        # Convert top edge to EdgeEdit
+        if len(sorted_edges) == 0:
+            return []
+        src, dst = sorted_edges[0][0]
+        edit_type = EdgeEditType.REMOVE if self.init_graph.has_edge(src, dst) else EdgeEditType.ADD
+
+        return [EdgeEdit(src, dst, edit_type)]
+    
