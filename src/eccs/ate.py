@@ -20,6 +20,8 @@ class ATECalculator:
         calculate_p_value: bool = False,
         calculate_std_error: bool = False,
         get_estimand: bool = False,
+        bootstrap_reps: int = 10,
+        bootstrap_fraction: float = 0.1,
     ) -> dict[str, Any]:
         """
         Calculate the ATE of `treatment` on `outcome`, alongside confidence measures.
@@ -74,7 +76,7 @@ class ATECalculator:
                 else None
             )
             stderr = (
-                estimate.get_standard_error() if calculate_std_error else None
+                estimate.get_standard_error({'num_simulations': bootstrap_reps, 'sample_size_fraction': bootstrap_fraction}) if calculate_std_error else None
             )
             d = {
                 "ATE": float(estimate.value),

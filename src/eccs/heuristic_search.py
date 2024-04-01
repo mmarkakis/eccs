@@ -1,20 +1,17 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import dihash
 import heapq
-import math
-# from multiprocessing import Lock, Pool, Process
 import networkx as nx
 import pandas as pd
-import pdb
 from threading import Lock, RLock
 from typing import Any, List, Optional, Tuple
 import warnings
 
 from .ate import ATECalculator
-from .edge_state_matrix import EdgeState, EdgeStateMatrix
+from .edge_state_matrix import EdgeStateMatrix
 
 class AStarSearch:
-    def __init__(self, init_graph: nx.DiGraph, treatment: int, outcome: int, data: pd.DataFrame, edge_states: Optional[EdgeStateMatrix]=None, gamma_1: float=2, gamma_2: float=0.5, p_value_threshold: float=0.5, std_err_threshold: float=0.01, computational_budget: int=1000):
+    def __init__(self, init_graph: nx.DiGraph, treatment: int, outcome: int, data: pd.DataFrame, edge_states: Optional[EdgeStateMatrix]=None, gamma_1: float=2, gamma_2: float=0.5, p_value_threshold: float=0.5, std_err_threshold: float=0.01, computational_budget: int=1000, bootstrap_reps=10, bootstrap_fraction=0.1):
         # n is the number of causal variables
         # m is the number of edges in the initial graph
         print("Initializing A star")
@@ -34,6 +31,8 @@ class AStarSearch:
         self.gamma_2 = gamma_2
         self.p_value_threshold = p_value_threshold
         self.std_err_threshold = std_err_threshold
+        self.bootstrap_reps = bootstrap_reps
+        self.bootstrap_fraction = bootstrap_fraction
         if edge_states is None: # backwards compatibility
             self.edge_states = EdgeStateMatrix([f'{i}' for i in range(self.n)])
         else:
@@ -75,20 +74,20 @@ class AStarSearch:
             self._ATE_cache_lock.release()
             ate = None
             try:
-                # print("trying ate")
                 ate = ATECalculator.get_ate_and_confidence(
                     data=self.data,
                     treatment=str(self.treatment),
                     outcome=str(self.outcome),
                     graph=graph,
                     calculate_p_value=True,
-                    calculate_std_error=True,
+                    calculate_std_error=False, # Try no std error
                     get_estimand=False,
+                    bootstrap_reps=self.bootstrap_reps,
+                    bootstrap_fraction=self.bootstrap_fraction,
                 )
-                # self._ATE_cache[id] = ate
+                ate["Standard Error"] = 0
             except ValueError: # Returned by handler of nx.exception.NodeNotFound
                 # Special case of treatment and outcome being not connected
-                # print("handling error")
                 ate = {
                     "ATE": 0,
                     "P-value": 0,
@@ -108,7 +107,6 @@ class AStarSearch:
         """
         # {"ATE": float, "P-value": float, "Standard Error": float, "Estimand": ?}
         # TODO: what is the type of Estimand
-        # TODO: implement caching for ATE information
         ATE_info = self._get_ATE_info(id, graph)
         # The math.inf stops graphs where treatment and outcome are not direct connected
         stderr = 0
@@ -127,8 +125,6 @@ class AStarSearch:
         # returns the id of the new neighbor or None if we don't explore
 
         new_graph = graph.copy()
-        # print("_explore_neighbor", n1, n2, is_add)
-        # breakpoint()
         
         if not is_add and len(new_graph.edges()) <= self.n: # Only explore completely connected graphs
             return (None, None)
@@ -148,7 +144,6 @@ class AStarSearch:
         if hashtag not in self._hashtag_to_id: # not seen yet, mark it as seen by storing hash
             self._hashtag_to_id[hashtag] = self._cur_next_id
             self._cur_next_id += 1
-            # print(self._cur_next_id)
         id = self._hashtag_to_id[hashtag]
         self._hashtag_to_id_lock.release()
 
@@ -156,9 +151,10 @@ class AStarSearch:
 
         # if ATE_info["P-value"] < self.p_value_threshold:
         if ATE_info["Standard Error"] > self.std_err_threshold:
-            self._visited_lock.acquire()
-            self._visited.add(id) # discard
-            self._visited_lock.release()
+            # print("recording neighbor", n1, n2, is_add)
+            #self._visited_lock.acquire()
+            #self._visited.add(id) # discard
+            #self._visited_lock.release()
             self._id_to_graph_lock.acquire()
             if id not in self._id_to_graph:
                 # new_graph = graph.copy()
@@ -181,16 +177,10 @@ class AStarSearch:
             # explore (but not commit to the path, so we don't set the precedessor here)
             self._id_to_graph_lock.acquire()
             if id not in self._id_to_graph: # store the result of this exploration
-                # new_graph = graph.copy()
                 self._id_to_graph[id] = new_graph
             self._id_to_graph_lock.release()
             result = id
         
-        # Revert the change on this graph before finish exploring
-        #if is_add:
-        #    graph.remove_edge(n1, n2)
-        #else:
-        #    graph.add_edge(n1, n2)
         return (result, (n1, n2, is_add))
     
     def _get_neighbors(self, current_node_id: int, frontier: List[Any], n_lookahead: int) -> List[Tuple[int, Tuple[int, int, bool]]]:
@@ -200,51 +190,27 @@ class AStarSearch:
         results_lock = Lock()
 
         def _get_one_neighbor(n1, n2, is_add):
-            # print("_get_one_neighbor", n1, n2, is_add)
             nonlocal results
             neighbor_res = None
             if graph.has_edge(n1, n2) and not self.edge_states.is_edge_fixed(n1, n2) and not is_add:
                 neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=False)
             elif n2 in nx.ancestors(graph, n1):
-                # print("cancelling", n1, n2, is_add)
                 return  # Adding this edge his creates a cycle
-            elif not self.edge_states.is_edge_banned(n1, n2) and is_add:
+            elif not graph.has_edge(n1, n2) and not self.edge_states.is_edge_banned(n1, n2) and is_add:
                 neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=True)
-            else:
-                # print("cancelling", n1, n2, is_add)
-                pass
             if neighbor_res is not None and neighbor_res[0] is not None:
                 results_lock.acquire()
                 results.append(neighbor_res)
                 results_lock.release()
-            # print("finishing", n1, n2, is_add)
         
-        """
-        for n1 in list(graph.nodes):
-            for n2 in list(graph.nodes):
-                if n2 == n1:
-                    continue # skip self-loops
-                neighbor_res = None
-                if graph.has_edge(n1, n2) and not self.edge_states.is_edge_fixed(n1, n2):
-                    neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=False)
-                elif n2 in nx.ancestors(graph, n1):
-                    continue # Adding this edge his creates a cycle
-                elif not self.edge_states.is_edge_banned(n1, n2):
-                    neighbor_res = self._explore_neighbor(current_node_id, graph, n1, n2, frontier, n_lookahead, is_add=True)
-                if neighbor_res[0] is not None:
-                    results.append(neighbor_res)
-        """
         with ThreadPoolExecutor() as executor:
             futures = []
             for n1 in list(graph.nodes):
                 for n2 in list(graph.nodes):
                     if n2 == n1:
                         continue  # skip self-loops
-                    # print("submitting", n1, n2)
                     futures.append(executor.submit(_get_one_neighbor, n1, n2, True))
                     futures.append(executor.submit(_get_one_neighbor, n1, n2, False))
-            # print("submitted everything")
-            # breakpoint()
             for future in as_completed(futures):
                 future.result()
         
@@ -272,7 +238,6 @@ class AStarSearch:
             hash_nodes=False,
             apply_quotient=False
         )
-        self._visited.add(0) # store actual graph here
         self._hashtag_to_id[start_hash] = 0
         self._id_to_graph[0] = self.init_graph
         # starting node always has id 0
@@ -285,7 +250,8 @@ class AStarSearch:
             warnings.simplefilter("ignore")
             while frontier:
                 _, current_node_id, n_lookahead = heapq.heappop(frontier)
-                self._visited.add(current_node_id)
+                if current_node_id in self._visited:
+                    continue
                 heapq.heappush(top_k_candidates, (self._get_potential(current_node_id, self._id_to_graph[current_node_id]), current_node_id))
                 if len(top_k_candidates) > k:
                     heapq.heappop(top_k_candidates)
@@ -293,6 +259,7 @@ class AStarSearch:
                 if self._cur_next_id > self._computational_budget:
                     break
                 for neighbor_id, edge_type in neighbors:
+                    assert(neighbor_id != current_node_id)
                     # when expanding neighbors, just discard ones that are too low p-value
                     tentative_g_score = self._g_score[current_node_id]
                     neighbor_g_score = self._g_score.get(neighbor_id, self._init_potential - self._get_potential(neighbor_id, self._id_to_graph[neighbor_id]))
@@ -305,13 +272,14 @@ class AStarSearch:
 
                     if self._cur_next_id > self._computational_budget:
                         break
-            
+                self._visited.add(current_node_id)
+            print("Top k candidates", top_k_candidates)
             edge_tally = {}
             
             for p in top_k_candidates:
                 c_id = p[1]
                 initial_c_id = p[1]
-                while c_id in self._predecessors:
+                while c_id in self._predecessors and c_id != 0:
                     c_id, (n1, n2, _) = self._predecessors[c_id]
                     if (n1, n2) not in edge_tally:
                         edge_tally[(n1, n2)] = (1, abs(self._ATE_cache[initial_c_id]["ATE"] - self.ATE_init))
