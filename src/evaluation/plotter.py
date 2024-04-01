@@ -46,6 +46,7 @@ LINE_FORMATTING_DATA = {
 
 FONTSIZE = 20
 
+
 def plot_edit_distance(ax: Axes, method: str, points: int, base_path: str) -> float:
     """
     Plots the edit distance for the given method.
@@ -207,11 +208,11 @@ def plot_invocation_duration(
             data = np.load(filepath)
 
             for i in range(len(data)):
-                file_counts[i] += 1
+                file_counts[i + 1] += 1
 
             if len(data) < points:
                 data = np.pad(
-                    data, (0, points - len(data)), "constant", constant_values=0
+                    data, (1, points - len(data) - 1), "constant", constant_values=0
                 )
 
             accumulator += data
@@ -223,6 +224,10 @@ def plot_invocation_duration(
         i / j if j != 0 else 0 for i, j in zip(accumulator, file_counts)
     ]
 
+    retval = max(elementwise_average)
+
+    elementwise_average[0] = None
+
     ax.plot(
         range(len(elementwise_average)),
         elementwise_average,
@@ -231,7 +236,7 @@ def plot_invocation_duration(
         color=LINE_FORMATTING_DATA[method]["color"],
     )
 
-    return max(elementwise_average)
+    return retval
 
 
 def plot_edits_per_invocation(
@@ -265,7 +270,7 @@ def plot_edits_per_invocation(
             data = np.load(filepath)
 
             for i in range(len(data)):
-                file_counts[i+1] += (1 if data[i] > 0 else 0)
+                file_counts[i + 1] += 1 if data[i] > 0 else 0
 
             if len(data) < points:
                 orig_len = len(data)
@@ -278,10 +283,8 @@ def plot_edits_per_invocation(
             else:
                 accumulator += data
 
-
     if all(x == 0 for x in file_counts):
         return 0
-    
 
     elementwise_average = [
         i / j if j != 0 else 0 for i, j in zip(accumulator, file_counts)
@@ -301,10 +304,11 @@ def plot_edits_per_invocation(
 
     return retval
 
+
 def plot_zero_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> float:
     """
     Plots the fraction of experiments with zero ATE difference at each round.
-    
+
     Parameters:
         ax: The axis to plot on.
         method: The method to plot.
@@ -329,7 +333,7 @@ def plot_zero_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> fl
             if len(diff_data) < points:
                 diff_data = np.pad(diff_data, (0, points - len(diff_data)), "edge")
 
-            accumulator += (diff_data < 10e-4).astype(int) 
+            accumulator += (diff_data < 10e-4).astype(int)
 
             file_count += 1
 
@@ -349,24 +353,41 @@ def plot_zero_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> fl
     return max(elementwise_average)
 
 
-def wrapup_plot(filename: str, ax: Axes, max_val: float, num_points:int) -> None:
+def wrapup_plot(
+    filename: str, ax: Axes, max_val: float, num_points: int, log_y_axis: bool = False
+) -> None:
     """
-    Set final formatting for the plot and save it to a file.
+    Set final formatting for the plot and save it to a file. Also print stats about the plotted
+    lines to another file.
 
     Parameters:
         filename: The name of the file to save the plot to.
         ax: The axis to save.
         maxes: The maximum value of the plotted data.
         num_points: The number of points to plot.
+        log_y_axis: Whether to use a log scale for the y-axis.
     """
 
-    ax.set_ylim(0, 1.1 * max_val)
+    # Deal with the stats
+    with open(filename + ".csv", "w") as f:
+        f.write("label,last_y,average_y\n")
+        for line in ax.get_lines():
+            y_data = line.get_ydata()
+            y_data = [x for x in y_data if x is not None]
+            f.write(f"{line.get_label()},{y_data[-1]},{np.mean(y_data)}\n")
+
+    # Deal with the figure
     ax.tick_params(axis="both", which="major", labelsize=FONTSIZE)
     ax.set_xlabel("User Interaction Index", fontsize=FONTSIZE)
     ax.set_xticks(np.arange(0, num_points, 2))
     ax.legend(fontsize=FONTSIZE)
+    if log_y_axis:
+        ax.set_yscale("log")
+        ax.set_ylim(0.001, 1.1 * max_val)
+    else:
+        ax.set_ylim(0, 1.1 * max_val)
     plt.tight_layout()
-    plt.savefig(filename)
+    plt.savefig(filename + ".png", dpi=300)
     plt.cla()
 
 
@@ -401,12 +422,7 @@ def plotter(path: str, skip: bool = False):
                 plot_edit_distance(ax, method, num_points, path),
             )
         ax.set_ylabel("Graph Edit Distance", fontsize=FONTSIZE)
-        wrapup_plot(
-            os.path.join(plots_path, "edit_distance.png"),
-            ax,
-            max_y,
-            num_points
-        )
+        wrapup_plot(os.path.join(plots_path, "edit_distance"), ax, max_y, num_points)
 
     ### ATE difference
     print("Plotting ATE difference...")
@@ -418,12 +434,7 @@ def plotter(path: str, skip: bool = False):
         for method in LINE_FORMATTING_DATA:
             max_y = max(max_y, plot_ate_diff(ax, method, num_points, path))
         ax.set_ylabel("ARE_ATE", fontsize=FONTSIZE)
-        wrapup_plot(
-            os.path.join(plots_path, "ate_error.png"),
-            ax,
-            max_y,
-            num_points
-        )
+        wrapup_plot(os.path.join(plots_path, "ate_error"), ax, max_y, num_points)
 
     ### Invocation Duration
     print("Plotting Invocation Duration...")
@@ -437,10 +448,11 @@ def plotter(path: str, skip: bool = False):
 
         ax.set_ylabel("Latency (s)", fontsize=FONTSIZE)
         wrapup_plot(
-            os.path.join(plots_path, "invocation_duration.png"),
+            os.path.join(plots_path, "invocation_duration"),
             ax,
             max_y,
-            num_points
+            num_points,
+            log_y_axis=True,
         )
 
     ### Edits per Invocation
@@ -455,10 +467,7 @@ def plotter(path: str, skip: bool = False):
 
         ax.set_ylabel(r"\# Suggested Edits", fontsize=FONTSIZE)
         wrapup_plot(
-            os.path.join(plots_path, "edits_per_invocation.png"),
-            ax,
-            max_y,
-            num_points
+            os.path.join(plots_path, "edits_per_invocation"), ax, max_y, num_points
         )
 
     ### Fraction of experiments with zero ATE difference at that round
@@ -472,12 +481,7 @@ def plotter(path: str, skip: bool = False):
             max_y = max(max_y, plot_zero_ate_diff(ax, method, num_points, path))
 
         ax.set_ylabel("Fraction of Experiments with\nZero ARE_ATE", fontsize=FONTSIZE)
-        wrapup_plot(
-            os.path.join(plots_path, "zero_ate_diff.png"),
-            ax,
-            max_y,
-            num_points
-        )
+        wrapup_plot(os.path.join(plots_path, "zero_ate_diff"), ax, max_y, num_points)
 
 
 if __name__ == "__main__":
