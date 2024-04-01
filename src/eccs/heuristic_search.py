@@ -25,7 +25,7 @@ class AStarSearch:
         gamma_1: float = 2,
         gamma_2: float = 0.5,
         p_value_threshold: float = 0.5,
-        std_err_threshold: float = 0.01,
+        std_err_threshold: float = -0.01,
         computational_budget: int = 1000,
         bootstrap_reps=10,
         bootstrap_fraction=0.1
@@ -79,11 +79,14 @@ class AStarSearch:
 
         self._frontier_lock = Lock()
 
-        init_ATE_info = self._get_ATE_info(0, init_graph)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            init_ATE_info = self._get_ATE_info(0, init_graph)
         assert 0 in self._ATE_cache
         self.ATE_init = init_ATE_info["ATE"]
         self._init_potential = self._get_potential(0, init_graph)
         print("Initialization finished")
+        #print("Initial ATE", self._ATE_cache[0])
 
     def _get_ATE_info(self, id: int, graph: nx.DiGraph):
         try:
@@ -101,7 +104,7 @@ class AStarSearch:
                     outcome=self.outcome,
                     graph=graph,
                     calculate_p_value=True,
-                    calculate_std_error=True, # Try no std error
+                    calculate_std_error=False, # Try no std error
                     get_estimand=False,
                     bootstrap_reps=self.bootstrap_reps,
                     bootstrap_fraction=self.bootstrap_fraction,
@@ -264,24 +267,26 @@ class AStarSearch:
     def astar(self, k: int = 100):
         # Side effect: prints the top 10 result
         # Returns the most frequently seen edge flips in sorted order
-        frontier = [
-            (0, self._cur_next_id, 0)
-        ]  # this is the pq (f(v), v), only store the ID
-        self._cur_next_id += 1
-
-        start_hash = dihash.hash_graph(
-            self.init_graph, hash_nodes=False, apply_quotient=False
-        )
-        self._hashtag_to_id[start_hash] = 0
-        self._id_to_graph[0] = self.init_graph
-        # starting node always has id 0
-        self._f_score[0] = -self._get_potential(0, self.init_graph)
-        # g_score[0] = self._init_potential + f_score[0]
-        self._g_score[0] = self._f_score[0]
-
-        top_k_candidates = []
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
+            frontier = [
+                (0, self._cur_next_id, 0)
+            ]  # this is the pq (f(v), v), only store the ID
+            self._cur_next_id += 1
+
+            start_hash = dihash.hash_graph(
+                self.init_graph, hash_nodes=False, apply_quotient=False
+            )
+            self._hashtag_to_id[start_hash] = 0
+            self._id_to_graph[0] = self.init_graph
+            # starting node always has id 0
+            self._f_score[0] = -self._get_potential(0, self.init_graph)
+            # g_score[0] = self._init_potential + f_score[0]
+            self._g_score[0] = self._f_score[0]
+
+            top_k_candidates = []
+            
+            
             while frontier:
                 _, current_node_id, n_lookahead = heapq.heappop(frontier)
                 if current_node_id in self._visited:
@@ -297,10 +302,10 @@ class AStarSearch:
                         self._computational_budget,
                     )
                     break
+                tentative_g_score = self._g_score[current_node_id]
                 for neighbor_id, edge_type in neighbors:
                     assert(neighbor_id != current_node_id)
                     # when expanding neighbors, just discard ones that are too low p-value
-                    tentative_g_score = self._g_score[current_node_id]
                     neighbor_g_score = self._g_score.get(neighbor_id, self._init_potential - self._get_potential(neighbor_id, self._id_to_graph[neighbor_id]))
                     if tentative_g_score <= neighbor_g_score:
                         self._predecessors[neighbor_id] = (current_node_id, edge_type)
@@ -330,6 +335,7 @@ class AStarSearch:
             sorted_edges = sorted(edge_tally.items(), key=lambda x:x[1][0], reverse=True)
             print("The top 10 edges are")
             print(sorted_edges[:10])
+            #print(self._ATE_cache)
 
         
         # Convert top edge to EdgeEdit
