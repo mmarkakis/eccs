@@ -21,6 +21,8 @@ class ATECalculator:
         calculate_p_value: bool = False,
         calculate_std_error: bool = False,
         get_estimand: bool = False,
+        bootstrap_reps: int = 10,
+        bootstrap_fraction: float = 0.1,
         print_timing_info: bool = False,
     ) -> dict[str, Any]:
         """
@@ -59,47 +61,45 @@ class ATECalculator:
         timings.append(datetime.now())
         d = {}
 
-        with open("/dev/null", "w+") as f:
-            try:
-                with contextlib.redirect_stdout(f), contextlib.redirect_stderr(f):
-                    timings.append(datetime.now())
-                    model = CausalModel(
-                        data=data[list(graph.nodes)],
-                        treatment=treatment_name,
-                        outcome=outcome_name,
-                        graph=graph,
-                    )
-                    timings.append(datetime.now())
-                    identified_estimand = model.identify_effect(
-                        proceed_when_unidentifiable=True
-                    )
-                    timings.append(datetime.now())
-                    estimate = model.estimate_effect(
-                        identified_estimand,
-                        method_name="backdoor.linear_regression",
-                        test_significance=True,
-                    )
-                    timings.append(datetime.now())
-                    p_value = (
-                        estimate.test_stat_significance()["p_value"].astype(float)[0]
-                        if calculate_p_value
-                        else None
-                    )
-                    timings.append(datetime.now())
-                    stderr = (
-                        estimate.get_standard_error() if calculate_std_error else None
-                    )
-                    timings.append(datetime.now())
-                    d = {
-                        "ATE": float(estimate.value),
-                        "P-value": p_value,
-                        "Standard Error": stderr,
-                    }
-                    if get_estimand:
-                        d["Estimand"] = identified_estimand
+        try:
+            timings.append(datetime.now())
+            model = CausalModel(
+                data=data[list(graph.nodes)],
+                treatment=treatment_name,
+                outcome=outcome_name,
+                graph=graph,
+            )
+            timings.append(datetime.now())
+            identified_estimand = model.identify_effect(
+                proceed_when_unidentifiable=True
+            )
+            timings.append(datetime.now())
+            estimate = model.estimate_effect(
+                identified_estimand,
+                method_name="backdoor.linear_regression",
+                test_significance=True,
+            )
+            timings.append(datetime.now())
+            p_value = (
+                estimate.test_stat_significance()["p_value"].astype(float)[0]
+                if calculate_p_value
+                else None
+            )
+            timings.append(datetime.now())
+            stderr = (
+                estimate.get_standard_error() if calculate_std_error else None
+            )
+            timings.append(datetime.now())
+            d = {
+                "ATE": float(estimate.value),
+                "P-value": p_value,
+                "Standard Error": stderr,
+            }
+            if get_estimand:
+                d["Estimand"] = identified_estimand
 
-            except:
-                raise ValueError
+        except:
+            raise ValueError
 
         timings.append(datetime.now())
         if print_timing_info:
