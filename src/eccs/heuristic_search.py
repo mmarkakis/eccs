@@ -23,7 +23,7 @@ class AStarSearch:
         gamma_1: float = 2,
         gamma_2: float = 0.5,
         p_value_threshold: float = 0.5,
-        std_err_threshold: float = 0.01,
+        std_err_threshold: float = -0.01,
         computational_budget: int = 1000,
     ):
         # n is the number of causal variables
@@ -104,19 +104,21 @@ class AStarSearch:
         # TODO: implement caching for ATE information
         ATE_info = self._get_ATE_info(id, graph)
         # The math.inf stops graphs where treatment and outcome are not direct connected
-        if False:
-            stderr = 0
-            if ATE_info["Standard Error"] == 0:
-                stderr = 1
-            else:
-                try:
-                    stderr = ATE_info["Standard Error"][0]
-                except IndexError:
-                    stderr = ATE_info["Standard Error"]
+
+        """
+        stderr = 0
+        if ATE_info["Standard Error"] == 0:
+            stderr = 1
+        else:
+            try:
+                stderr = ATE_info["Standard Error"][0]
+            except IndexError:
+                stderr = ATE_info["Standard Error"]
+        """
 
         return (
             ATE_info["ATE"]
-            # - self.gamma_1 * stderr
+            #- self.gamma_1 * stderr
             + ATE_info["P-value"]
             + 0.01 * abs(len(graph.edges()) - self.m * 2)
         )  # TODO: 2 is a guess of average degree
@@ -158,8 +160,9 @@ class AStarSearch:
         ATE_info = self._get_ATE_info(id, graph)
 
         # if ATE_info["P-value"] < self.p_value_threshold:
-        if False: #ATE_info["Standard Error"] > self.std_err_threshold:
-            self._visited.add(id)  # discard
+        #if ATE_info["Standard Error"] > self.std_err_threshold:
+        if ATE_info["ATE"] <= 0.01:
+            # self._visited.add(id)  # discard
             if id not in self._id_to_graph:
                 new_graph = graph.copy()
                 self._id_to_graph[id] = new_graph
@@ -253,7 +256,7 @@ class AStarSearch:
         start_hash = dihash.hash_graph(
             self.init_graph, hash_nodes=False, apply_quotient=False
         )
-        self._visited.add(0)  # store actual graph here
+        # self._visited.add(0)  # store actual graph here
         self._hashtag_to_id[start_hash] = 0
         self._id_to_graph[0] = self.init_graph
         # starting node always has id 0
@@ -265,7 +268,8 @@ class AStarSearch:
 
         while frontier:
             _, current_node_id, n_lookahead = heapq.heappop(frontier)
-            self._visited.add(current_node_id)
+            if current_node_id in self._visited:
+                continue
             heapq.heappush(
                 top_k_candidates,
                 (
@@ -314,6 +318,7 @@ class AStarSearch:
                         self._computational_budget,
                     )
                     break
+            self._visited.add(current_node_id)
 
         edge_tally = {}
 
