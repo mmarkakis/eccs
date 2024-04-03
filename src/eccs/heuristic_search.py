@@ -1,15 +1,12 @@
 import dihash
 import heapq
-import math
 import networkx as nx
 import pandas as pd
 from typing import Any, List, Optional, Tuple
 
 from .ate import ATECalculator
-from .edge_state_matrix import EdgeState, EdgeStateMatrix
+from .edge_state_matrix import EdgeStateMatrix
 from .edges import EdgeEditType, EdgeEdit
-from datetime import datetime
-import sys
 
 
 class AStarSearch:
@@ -339,16 +336,25 @@ class AStarSearch:
                         self._ATE_cache[initial_c_id]["ATE"] - self.ATE_init
                     )
                     edge_tally[(n1, n2)] = (cnt, total_diff)
-
+        
+        num_return = 10
+        res = []
         sorted_edges = sorted(edge_tally.items(), key=lambda x: x[1][0], reverse=True)                
         print("The top 10 edges are")
         print(sorted_edges[:10])
+        for (edge, _) in sorted_edges:
+            src = edge[0]
+            dst = edge[1]
+            if self.edge_states.is_edge_fixed(src, dst):
+                continue
+            
+            edit_type = EdgeEditType.REMOVE if self.init_graph.has_edge(src, dst) else EdgeEditType.ADD
+            res.append(EdgeEdit(src, dst, edit_type))
+            if len(res) > num_return:
+                break
         
         # Convert top edge to EdgeEdit
         if len(sorted_edges) == 0:
             return []
-        src, dst = sorted_edges[0][0]
-        edit_type = EdgeEditType.REMOVE if self.init_graph.has_edge(src, dst) else EdgeEditType.ADD
-
-        return [EdgeEdit(src, dst, edit_type)]
+        return res
     
