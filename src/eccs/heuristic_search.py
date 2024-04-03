@@ -45,6 +45,7 @@ class AStarSearch:
         self.gamma_2 = gamma_2
         self.p_value_threshold = p_value_threshold
         self.std_err_threshold = std_err_threshold
+        self.ate_calculator = ATECalculator()
         if edge_states is None:  # backwards compatibility
             self.edge_states = EdgeStateMatrix(list(self.data.columns))
         else:
@@ -75,7 +76,7 @@ class AStarSearch:
             return self._ATE_cache[id]
         except KeyError:
             try:
-                ate = ATECalculator.get_ate_and_confidence(
+                ate = self.ate_calculator.get_ate_and_confidence(
                     data=self.data,
                     treatment=self.treatment,
                     outcome=self.outcome,

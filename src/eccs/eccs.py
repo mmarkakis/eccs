@@ -47,6 +47,8 @@ class ECCS:
         self._num_vars = self._data.shape[1]
         self._edge_states = EdgeStateMatrix(list(self._data.columns))
 
+        self.ate_calculator = ATECalculator()
+
         # Load graph appropriately
         if isinstance(graph, str):
             graph = nx.DiGraph(nx.nx_pydot.read_dot(graph))
@@ -376,7 +378,7 @@ class ECCS:
         if outcome is None:
             outcome = self._outcome
 
-        return ATECalculator.get_ate_and_confidence(
+        return self.ate_calculator.get_ate_and_confidence(
             self.data, treatment=treatment, outcome=outcome, graph=graph
         )["ATE"]
 

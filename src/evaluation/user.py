@@ -17,7 +17,7 @@ class ECCSUser:
     The user knows the ground truth causal graph and responds to the system's suggestions
     accordingly.
     """
-
+    ate_calculator = ATECalculator()
     def __init__(
         self,
         data: str | pd.DataFrame,
@@ -126,7 +126,7 @@ class ECCSUser:
         """
         if not self.true_has_directed_path:
             return None
-        return ATECalculator.get_ate_and_confidence(
+        return self.ate_calculator.get_ate_and_confidence(
             self._data, self._treatment, self._outcome, self._true_graph
         )["ATE"]
 
@@ -141,7 +141,7 @@ class ECCSUser:
         """
         if not self.current_has_directed_path:
             return None
-        return ATECalculator.get_ate_and_confidence(
+        return self.ate_calculator.get_ate_and_confidence(
             self._data, self._treatment, self._outcome, self._eccs.graph
         )["ATE"]
 
