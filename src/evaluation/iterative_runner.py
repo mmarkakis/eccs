@@ -5,7 +5,6 @@ import sys
 sys.path.append("../..")
 from src.generators.random_dag_generator import RandomDAGGenerator
 from src.generators.random_dataset_generator import RandomDatasetGenerator
-from src.evaluation.causal_discovery import CausalDiscovery
 from src.evaluation.user import ECCSUser
 import networkx as nx
 import os

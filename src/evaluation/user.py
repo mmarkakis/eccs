@@ -7,7 +7,7 @@ from ..eccs.edge_state_matrix import EdgeState
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 
 
 class ECCSUser:
@@ -62,6 +62,11 @@ class ECCSUser:
         self._eccs = ECCS(data, test_graph)
         self._eccs.set_treatment(treatment)
         self._eccs.set_outcome(outcome)
+
+        # This is the index of steps where algorithms that might suggest multiple
+        # edges in one invocation gets invoked, for plotting and data analysis
+        # purposes
+        self._eccs_algorithm_invocation_iters = []
 
         self._invocations = 0
         self._ate_trajectory = [self.current_ate]
@@ -125,7 +130,7 @@ class ECCSUser:
             None if the graph does not contain a directed path from the treatment to the outcome.
         """
         if not self.true_has_directed_path:
-            return None
+            return 0
         return self.ate_calculator.get_ate_and_confidence(
             self._data, self._treatment, self._outcome, self._true_graph
         )["ATE"]
@@ -140,7 +145,7 @@ class ECCSUser:
             None if the graph does not contain a directed path from the treatment to the outcome.
         """
         if not self.current_has_directed_path:
-            return None
+            return 0
         return self.ate_calculator.get_ate_and_confidence(
             self._data, self._treatment, self._outcome, self._eccs.graph
         )["ATE"]
@@ -154,8 +159,8 @@ class ECCSUser:
             The difference between the current ATE and the true ATE, or
             None if either graph does not contain a directed path from the treatment to the outcome.
         """
-        if not self.current_has_directed_path or not self.true_has_directed_path:
-            return None
+        #if not self.current_has_directed_path or not self.true_has_directed_path:
+        #    return None
         return self.current_ate - self.true_ate
 
     @property
@@ -274,7 +279,7 @@ class ECCSUser:
         """
         return self._edits_per_invocation_trajectory
 
-    def invoke_eccs(self, method: str = None) -> bool:
+    def invoke_eccs(self, method: str = None) -> Tuple[bool, bool]:
         """
         Invokes the ECCS system and updates the fixed and banned nodes accordingly.
 
@@ -287,7 +292,7 @@ class ECCSUser:
 
         # Get suggested modifications and selectively apply them
         start = datetime.now()
-        edits, ate = self._eccs.suggest(method)
+        edits, ate, alg_invoked = self._eccs.suggest(method)
         end = datetime.now()
         self._invocation_duration_trajectory.append((end - start).total_seconds())
         self._edits_per_invocation_trajectory.append(len(edits))
@@ -295,7 +300,7 @@ class ECCSUser:
             f"In iteration {self._invocations + 1} ECCS suggested: {edits} in {self._invocation_duration_trajectory[-1]} seconds."
         )
         if len(edits) == 0:
-            return False
+            return (False, alg_invoked)
         for src, dst, edit_type in edits:
             edge = (src, dst)
             if edit_type == EdgeEditType.ADD and edge not in self._eccs.graph.edges():
@@ -342,7 +347,7 @@ class ECCSUser:
         print(
             f"\tUpdated edit distance: {self.current_graph_edit_distance} (from {self.edit_distance_trajectory[-2]})"
         )
-        return True
+        return (True, alg_invoked)
 
     def run(self, steps: int, method: str = None) -> None:
         """
@@ -356,7 +361,9 @@ class ECCSUser:
 
         for i in range(steps):
             print(f"Running iteration {i + 1}")
-            suggested_edits = self.invoke_eccs(method)
+            suggested_edits, alg_invoked = self.invoke_eccs(method)
+            if alg_invoked:
+                self._eccs_algorithm_invocation_iters.append(i)
             if not suggested_edits:
                 print(
                     "ECCS suggested no changes. Stopping. Total suggested edits over time: ",
@@ -366,3 +373,4 @@ class ECCSUser:
                     "Final ATE difference: ", self.current_ate_diff
                 )
                 break
+        print("The specific ECCS Algorithm was invoked in the following steps: ", self._eccs_algorithm_invocation_iters)

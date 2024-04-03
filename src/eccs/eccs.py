@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import Any, List, Optional, Tuple
 import pandas as pd
 import networkx as nx
-from networkx.algorithms.d_separation import minimal_d_separator
 from .ate import ATECalculator
 from .edge_state_matrix import EdgeState, EdgeStateMatrix
 from .edges import EdgeEditType, EdgeEdit
@@ -11,8 +10,6 @@ from .heuristic_search import AStarSearch
 from .map_adj_set_to_graph import MapAdjSetToGraph
 
 from itertools import combinations
-from tqdm.auto import tqdm
-import multiprocessing
 import numpy as np
 
 
@@ -28,6 +25,7 @@ class ECCS:
         "astar_single_edge_change",
         "random_single_edge_change",
     ]
+    A_STAR_NUM_SUGGESTIONS_PER_INVOCATION = 5
 
     def __init__(self, data: str | pd.DataFrame, graph: str | nx.DiGraph):
         """
@@ -48,6 +46,8 @@ class ECCS:
         self._edge_states = EdgeStateMatrix(list(self._data.columns))
 
         self.ate_calculator = ATECalculator()
+        self._cached_edit_options = []
+        self._cached_furthest_ate = 0
 
         # Load graph appropriately
         if isinstance(graph, str):
@@ -183,9 +183,10 @@ class ECCS:
             and all(  # It includes all fixed edges.
                 graph.has_edge(src, dst) for src, dst in self._edge_states.fixed_list
             )
-            and nx.has_path(  # There is a directed path from the treatment to the outcome.
-                graph, self.treatment, self.outcome
-            )
+            #and nx.has_path(  # There is a directed path from the treatment to the outcome.
+            #    graph, self.treatment, self.outcome
+            #) # removed this constraint on 04/03 because in the true graph treatment and outcome might
+            # not be connected
             and nx.is_directed_acyclic_graph(graph)  # It is a directed acyclic graph.
         )
 
@@ -382,7 +383,7 @@ class ECCS:
             self.data, treatment=treatment, outcome=outcome, graph=graph
         )["ATE"]
 
-    def suggest(self, method: str) -> tuple[list[EdgeEdit], float]:
+    def suggest(self, method: str) -> tuple[list[EdgeEdit], float, bool]:
         """
         Suggest a modification to the graph that yields a maximally different ATE,
         compared to the current ATE. The modification should not edit edges that are
@@ -556,7 +557,7 @@ class ECCS:
                     ate = self._edit_and_get_ate([EdgeEdit(e2, e1, EdgeEditType.FLIP)])
                     maybe_update_best(ate, [EdgeEdit(e2, e1, EdgeEditType.FLIP)])
 
-        return (best_edits, furthest_ate)
+        return (best_edits, furthest_ate, True) # True since invoked for every edge
 
     def _suggest_best_single_edge_change_heuristic(
         self,
@@ -567,11 +568,19 @@ class ECCS:
         Returns:
             A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
+        if len(self._cached_edit_options) > 0:
+            edit = self._cached_edit_options.pop(0)
+            return ([edit], self._edit_and_get_ate([edit]), False)
         a_star = AStarSearch(
             self._graph, self._treatment, self._outcome, self._data, self._edge_states
         )
         edits = a_star.astar()
-        return (edits, self._edit_and_get_ate(edits))
+        self._cached_edit_options = edits[:self.A_STAR_NUM_SUGGESTIONS_PER_INVOCATION]
+        edit = self._cached_edit_options.pop(0)
+        res = ([edit], self._edit_and_get_ate([edit]), True)
+
+        #return ([edit], self._edit_and_get_ate([edit]), True) # TODO: FIXME
+        return res
 
     def _suggest_best_single_adjustment_set_change(
         self, naive: bool
@@ -585,7 +594,12 @@ class ECCS:
         Returns:
             A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
         """
-        print("Suggesting best single adjustment set change")
+        if len(self._cached_edit_options) > 0:
+            print("Serving previous edge suggestion based on best single adjustment set change")
+            edit = self._cached_edit_options.pop(0)
+            return ([edit], self._cached_furthest_ate, False)
+            
+        print("Computing and suggesting best single adjustment set change")
         base_ate = self.get_ate()
         furthest_ate = self.get_ate()
         best_ate_diff = 0
@@ -644,8 +658,11 @@ class ECCS:
                 maybe_update_best(ate, edit_list)
 
         print("Done evaluating options")
-
-        return (best_edits, furthest_ate)
+        self._cached_furthest_ate = furthest_ate
+        self._cached_edit_options = best_edits
+        if len(best_edits) == 0:
+            return ([], furthest_ate, True)
+        return ([self._cached_edit_options.pop(0)], furthest_ate, True)
 
     def _suggest_random_single_edge_change(
         self,
@@ -690,4 +707,5 @@ class ECCS:
             return (
                 [edit],
                 ate,
+                True
             )
