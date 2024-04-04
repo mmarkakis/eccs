@@ -241,7 +241,7 @@ class ECCS:
             target_state = EdgeState.SUGGESTED if is_suggested else EdgeState.PRESENT
             self._edge_states.mark_edge(src, dst, target_state)
 
-    def remove_edge(self, src: str, dst: str, remove_isolates: bool = True) -> None:
+    def remove_edge(self, src: str, dst: str, remove_isolates: bool = False) -> None:
         """
         Remove an edge from the graph and then optionally remove any nodes with degree zero.
         Can only remove an edge if its current state is present.
