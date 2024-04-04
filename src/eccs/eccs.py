@@ -25,7 +25,7 @@ class ECCS:
         "astar_single_edge_change",
         "random_single_edge_change",
     ]
-    A_STAR_NUM_SUGGESTIONS_PER_INVOCATION = 5
+    A_STAR_NUM_SUGGESTIONS_PER_INVOCATION = 2
 
     def __init__(self, data: str | pd.DataFrame, graph: str | nx.DiGraph):
         """
