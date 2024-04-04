@@ -21,7 +21,6 @@ class ECCS:
     EDGE_SUGGESTION_METHODS = [
         "best_single_edge_change",
         "best_single_adjustment_set_change",
-        "best_single_adjustment_set_change_naive",
         "astar_single_edge_change",
         "random_single_edge_change",
     ]
@@ -405,9 +404,7 @@ class ECCS:
         if method == "best_single_edge_change":
             return self._suggest_best_single_edge_change()
         elif method == "best_single_adjustment_set_change":
-            return self._suggest_best_single_adjustment_set_change(naive=False)
-        elif method == "best_single_adjustment_set_change_naive":
-            return self._suggest_best_single_adjustment_set_change(naive=True)
+            return self._suggest_best_single_adjustment_set_change()
         elif method == "random_single_edge_change":
             return self._suggest_random_single_edge_change()
         elif method == "astar_single_edge_change":
@@ -593,13 +590,10 @@ class ECCS:
         return res
 
     def _suggest_best_single_adjustment_set_change(
-        self, naive: bool
+        self,
     ) -> Tuple[list[EdgeEdit], float, bool]:
         """
         Suggest the best_single_adjustment_set_changes that maximally changes the ATE.
-
-        Parameters:
-            naive: Whether to use the naive approach for translating adjustment sets to graph edits.
 
         Returns:
             A tuple containing a list of the suggested edge edit(s), the resulting ATE and
@@ -653,7 +647,7 @@ class ECCS:
         # Try adding each of the addable
         for v in vars_not_in_adj_set:
             print(f"Trying to add {v} to the adjustment set")
-            edit_lists = mapper.map_addition(v, naive=naive)
+            edit_lists = mapper.map_addition(v)
             print("Got back edit list for addition: ", edit_lists)
             for edit_list in edit_lists:
                 print("A possible set of edits would be: ", edit_list)
@@ -663,7 +657,7 @@ class ECCS:
         # Try removing each of the removable
         for v in base_adj_set:
             print(f"Trying to remove {v} from the adjustment set")
-            edit_lists = mapper.map_removal(v, naive=naive)
+            edit_lists = mapper.map_removal(v)
             print("Got back edit lists for removal: ", edit_lists)
             for edit_list in edit_lists:
                 print("A possible set of edits would be: ", edit_list)
