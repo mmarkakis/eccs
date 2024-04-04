@@ -19,25 +19,25 @@ from matplotlib.axes import Axes
 
 LINE_FORMATTING_DATA = {
     "random_single_edge_change": {
-        "label": r"\textsc{RandomEdgeEdit}",
+        "label": r"\textsc{RandomEdit}",
         "color": "#d3d3d3",
         "marker": "o",
         "path": "random_single_edge_change",
     },
     "best_single_edge_change": {
-        "label": r"\textsc{BestEdgeEdit}",
+        "label": r"\textsc{SingleEdit}",
         "color": "#7F9FBA",
         "marker": "o",
         "path": "best_single_edge_change",
     },
-    "best_single_adjustment_set_change_naive": {
+    "best_single_adjustment_set_change": {
         "label": r"\textsc{AdjSetEdit}",
         "color": "#7FBA82",
         "marker": "o",
-        "path": "best_single_adjustment_set_change_naive",
+        "path": "best_single_adjustment_set_change",
     },
     "astar_single_edge_change": {
-        "label": r"\textsc{A*EdgeEdit}",
+        "label": r"\textsc{AStarEdit}",
         "color": "#ba8a7f",
         "marker": "o",
         "path": "astar_single_edge_change",
