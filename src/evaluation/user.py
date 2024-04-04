@@ -64,7 +64,7 @@ class ECCSUser:
         self._eccs.set_outcome(outcome)
 
         # This is the index of steps where algorithms that might suggest multiple
-        # edges in one invocation gets invoked, for plotting and data analysis
+        # edges in one invocation got invoked, for plotting and data analysis
         # purposes
         self._eccs_algorithm_invocation_iters = []
 
@@ -279,9 +279,13 @@ class ECCSUser:
         """
         return self._edits_per_invocation_trajectory
 
-    def invoke_eccs(self, method: str = None) -> Tuple[bool, bool]:
+    def invoke_eccs(self, method: str = None, budget: int = None) -> bool:
         """
         Invokes the ECCS system and updates the fixed and banned nodes accordingly.
+
+        Parameters:
+            method: The method to use for edge suggestions.
+            budget: The budget for the invocation. Not all methods use this.
 
         Returns:
             Whether the invocation returned any changes.
@@ -292,7 +296,7 @@ class ECCSUser:
 
         # Get suggested modifications and selectively apply them
         start = datetime.now()
-        edits, ate, alg_invoked = self._eccs.suggest(method)
+        edits, ate, alg_invoked = self._eccs.suggest(method, budget)
         end = datetime.now()
         self._invocation_duration_trajectory.append((end - start).total_seconds())
         self._edits_per_invocation_trajectory.append(len(edits))
@@ -349,7 +353,7 @@ class ECCSUser:
         )
         return (True, alg_invoked)
 
-    def run(self, steps: int, method: str = None) -> None:
+    def run(self, steps: int, method: str = None, budget: int = None) -> None:
         """
         Simulate the user for `steps` steps. In each step, the user invokes the ECCS
         system and updates the fixed and banned edges accordingly.
@@ -357,11 +361,12 @@ class ECCSUser:
         Parameters:
             steps: The number of steps that the user executes
             method: The method to use for edge suggestions.
+            budget: The budget for each invocation. Not all methods use this.
         """
 
         for i in range(steps):
             print(f"Running iteration {i + 1}")
-            suggested_edits, alg_invoked = self.invoke_eccs(method)
+            suggested_edits, alg_invoked = self.invoke_eccs(method, budget)
             if alg_invoked:
                 self._eccs_algorithm_invocation_iters.append(i)
             if not suggested_edits:

@@ -8,6 +8,8 @@ from .ate import ATECalculator
 from .edge_state_matrix import EdgeStateMatrix
 from .edges import EdgeEditType, EdgeEdit
 
+DEFAULT_BUDGET = 1000
+
 
 class AStarSearch:
     def __init__(
@@ -21,8 +23,11 @@ class AStarSearch:
         gamma_2: float = 0.5,
         p_value_threshold: float = 0.5,
         std_err_threshold: float = -0.01,
-        computational_budget: int = 1000,
+        computational_budget: int = DEFAULT_BUDGET,
     ):
+        if computational_budget is None or computational_budget < 0:
+            computational_budget = DEFAULT_BUDGET
+
         # n is the number of causal variables
         # m is the number of edges in the initial graph
         print("Initializing A star")
