@@ -25,6 +25,7 @@ gen_starting_dag:
 run_eccs:
   num_steps: 10
   num_tries_for_random_method: 10
+  astar_budget: 1000
   methods:
     [
       "best_single_edge_change",

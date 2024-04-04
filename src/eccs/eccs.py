@@ -383,7 +383,7 @@ class ECCS:
             self.data, treatment=treatment, outcome=outcome, graph=graph
         )["ATE"]
 
-    def suggest(self, method: str) -> tuple[list[EdgeEdit], float, bool]:
+    def suggest(self, method: str, budget: Optional[int] = None) -> tuple[list[EdgeEdit], float]:
         """
         Suggest a modification to the graph that yields a maximally different ATE,
         compared to the current ATE. The modification should not edit edges that are
@@ -391,6 +391,7 @@ class ECCS:
 
         Parameters:
             method: The method to use for suggestion. Must be in ECCS.EDGE_SUGGESTION_METHODS.
+            budget: The budget for finding a suggestion. Not all methods use this. 
 
         Returns:
           A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
@@ -411,7 +412,7 @@ class ECCS:
         elif method == "random_single_edge_change":
             return self._suggest_random_single_edge_change()
         elif method == "astar_single_edge_change":
-            return self._suggest_best_single_edge_change_heuristic()
+            return self._suggest_best_single_edge_change_heuristic(budget)
 
     def _edit_and_get_ate(self, edits: list[EdgeEdit]) -> Optional[float]:
         """
@@ -560,10 +561,13 @@ class ECCS:
         return (best_edits, furthest_ate, True) # True since invoked for every edge
 
     def _suggest_best_single_edge_change_heuristic(
-        self,
+        self, budget: Optional[int] = None
     ) -> Tuple[list[EdgeEdit], float]:
         """
         Suggest the best single edge change based on A star
+
+        Parameters:
+            budget: The budget for the search.
 
         Returns:
             A tuple containing a list of the suggested edge edit(s) and the resulting ATE.
@@ -572,7 +576,7 @@ class ECCS:
             edit = self._cached_edit_options.pop(0)
             return ([edit], self._edit_and_get_ate([edit]), False)
         a_star = AStarSearch(
-            self._graph, self._treatment, self._outcome, self._data, self._edge_states
+            self._graph, self._treatment, self._outcome, self._data, self._edge_states, computational_budget=budget
         )
         edits = a_star.astar()
         self._cached_edit_options = edits[:self.A_STAR_NUM_SUGGESTIONS_PER_INVOCATION]

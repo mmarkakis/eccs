@@ -41,6 +41,7 @@ def simulate(
         str,
         int,
         int,
+        int,
     ]
 ) -> None:
     """
@@ -58,6 +59,7 @@ def simulate(
             dataset_name: The name of the dataset.
             num_steps: The number of steps to run the ECCS user for.
             i: The index of the run, if applicable.
+            astar_budget: The budget for astar, if applicable
     """
 
     (
@@ -71,6 +73,7 @@ def simulate(
         dataset_name,
         num_steps,
         i,
+        astar_budget
     ) = args
 
     f = open(
@@ -126,7 +129,7 @@ def simulate(
             banned_list,
         )
 
-        user.run(num_steps, method)
+        user.run(num_steps, method, astar_budget)
     except:
         traceback.print_exc(file=f)
 
@@ -355,6 +358,7 @@ async def main():
                                                 dataset_name,
                                                 num_steps,
                                                 i,
+                                                config['run_eccs']['astar_budget']
                                             )
                                         )
                                 else:
@@ -370,6 +374,7 @@ async def main():
                                             dataset_name,
                                             num_steps,
                                             None,
+                                            config['run_eccs']['astar_budget']
                                         )
                                     )
 
