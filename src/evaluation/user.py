@@ -318,7 +318,7 @@ class ECCSUser:
                     print(f"\tThis led the user to ban the edge {src} -> {dst}")
             elif edit_type == EdgeEditType.REMOVE and edge in self._eccs.graph.edges():
                 if edge not in self._true_graph.edges():
-                    self._eccs.remove_edge(src, dst)
+                    self._eccs.remove_edge(src, dst, remove_isolates=False)
                     self._eccs.ban_edge(src, dst)
 
                     print(
@@ -329,7 +329,7 @@ class ECCSUser:
                     print(f"\tThis led the user to fix the edge {src} -> {dst}")
             elif edit_type == EdgeEditType.FLIP and edge in self._eccs.graph.edges():
                 if edge[::-1] in self._true_graph.edges():
-                    self._eccs.remove_edge(src, dst)
+                    self._eccs.remove_edge(src, dst, remove_isolates=False)
                     self._eccs.add_edge(dst, src)
                     self._eccs.fix_edge(dst, src)
                     print(
