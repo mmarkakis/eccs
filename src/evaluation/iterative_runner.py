@@ -157,8 +157,8 @@ def simulate(
         user.invocation_duration_trajectory,
     )
     np.save(
-        f"{exp_prefix}edits_per_invocation_trajectory.npy",
-        user.edits_per_invocation_trajectory,
+        f"{exp_prefix}fresh_edits_trajectory.npy",
+        user.fresh_edits_trajectory,
     )
 
     f.close()
