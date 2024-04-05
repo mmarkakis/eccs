@@ -94,18 +94,15 @@ class MapAdjSetToGraph:
     def map_addition(
         self,
         v: str,
-    ) -> list[list[EdgeEdit]]:
+    ) -> list[EdgeEdit]:
         """
-        Map an addition to the adjustment set to a list of lists.
-        Each inner list contains causal graph edits that correspond to the
-        addition of v to the adjustment set.
+        Map an addition to the adjustment set to a list of causal graph edits.
 
         Parameters:
             v: The variable to add to the adjustment set.
 
         Returns:
-            A list of lists, where each inner list contains causal graph edits that correspond
-            to the addition of v to the adjustment set.
+            A list of causal graph edits that correspond to the addition of v to the adjustment set.
         """
 
         e = []
@@ -118,31 +115,24 @@ class MapAdjSetToGraph:
             for p in paths:
                 edit = self._break_path_near(p, v)
                 if edit is None:
-                    return [[]]
+                    return []
                 e.append(edit)
         e.append(EdgeEdit(v, self.treatment, EdgeEditType.ADD))
         e.append(EdgeEdit(v, self.outcome, EdgeEditType.ADD))
-        return [list(set(e))]
+        return list(set(e))
 
     def map_removal(
         self,
         v: str,
-    ) -> list[list[EdgeEdit]]:
+    ) -> list[EdgeEdit]:
         """
-        Map a removal from the adjustment set to a list of lists.
-        Each inner list contains causal graph edits that correspond to the
-        removal of v from the adjustment set.
+        Map a removal from the adjustment set to a list of causal graph edits.
 
         Parameters:
-            graph: The causal graph.
-            treatment: The treatment variable.
-            outcome: The outcome variable.
-            base_adj_set: The starting adjustment set.
             v: The variable to remove from the adjustment set.
 
         Returns:
-            A list of lists, where each inner list contains causal graph edits that correspond
-            to the removal of v from the adjustment set.
+            A list of causal graph edits that correspond to the removal of v from the adjustment set.
         """
 
         e = []
@@ -151,18 +141,18 @@ class MapAdjSetToGraph:
             for p in paths:
                 edit = self._break_path_near(p, v)
                 if edit is None:
-                    return [[]]
+                    return []
                 e.append(edit)
 
         ord_desc = self._find_ordered_descendants(self.treatment)
         for w in ord_desc:
             if not (w, v) in self.ban_list:
-                if (v,w) in self.graph.edges:
+                if (v, w) in self.graph.edges:
                     e.append(EdgeEdit(v, w, EdgeEditType.FLIP))
                 else:
                     e.append(EdgeEdit(w, v, EdgeEditType.ADD))
-                return [list(set(e))]
-        return [[]]
+                return list(set(e))
+        return []
 
     def _treatment_parents(self) -> list[str]:
         """

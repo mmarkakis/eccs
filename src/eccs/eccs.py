@@ -651,22 +651,18 @@ class ECCS:
         # Try adding each of the addable
         for v in vars_not_in_adj_set:
             print(f"Trying to add {v} to the adjustment set")
-            edit_lists = mapper.map_addition(v)
-            print("Got back edit list for addition: ", edit_lists)
-            for edit_list in edit_lists:
-                print("A possible set of edits would be: ", edit_list)
-                ate = self._edit_and_get_ate(edit_list)
-                maybe_update_best(ate, edit_list)
+            edits = mapper.map_addition(v)
+            print("Got back edits for addition: ", edits)
+            ate = self._edit_and_get_ate(edits)
+            maybe_update_best(ate, edits)
 
         # Try removing each of the removable
         for v in base_adj_set:
             print(f"Trying to remove {v} from the adjustment set")
-            edit_lists = mapper.map_removal(v)
-            print("Got back edit lists for removal: ", edit_lists)
-            for edit_list in edit_lists:
-                print("A possible set of edits would be: ", edit_list)
-                ate = self._edit_and_get_ate(edit_list)
-                maybe_update_best(ate, edit_list)
+            edits = mapper.map_removal(v)
+            print("Got back edit lists for removal: ", edits)
+            ate = self._edit_and_get_ate(edits)
+            maybe_update_best(ate, edits)
 
         print("Done evaluating options")
         self._cached_furthest_ate = furthest_ate
