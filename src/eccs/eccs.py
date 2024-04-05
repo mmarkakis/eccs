@@ -1,10 +1,10 @@
 from __future__ import annotations
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Callable
 import pandas as pd
 import networkx as nx
 from .ate import ATECalculator
 from .edge_state_matrix import EdgeState, EdgeStateMatrix
-from .edges import EdgeEditType, EdgeEdit
+from .edges import Edge, EdgeEditType, EdgeEdit
 from .graph_renderer import GraphRenderer
 from .heuristic_search import AStarSearch
 from .map_adj_set_to_graph import MapAdjSetToGraph
@@ -47,6 +47,7 @@ class ECCS:
         self.ate_calculator = ATECalculator()
         self._cached_edit_options = []
         self._cached_furthest_ate = 0
+        self._cached_acceptance_test = None
 
         # Load graph appropriately
         if isinstance(graph, str):
@@ -222,7 +223,7 @@ class ECCS:
         """
         GraphRenderer.save_graph(self._graph, self._edge_states, filename)
 
-    def add_edge(self, src: str, dst: str, is_suggested: bool = False) -> None:
+    def add_edge(self, src: str, dst: str, is_suggested: bool = False) -> bool:
         """
         Add an edge to the graph and mark it as present, or as suggested if `is_suggested`
         is True. Can only add an edge if its current state is absent.
@@ -232,6 +233,9 @@ class ECCS:
             dst: The name of the destination variable.
             is_suggested: Whether the edge addition is suggested by the system, as opposed
                 to being manually added by the user.
+
+        Returns:
+            True if the edge was indeed added, False otherwise.
         """
         if self._edge_states.is_edge_in_state(src, dst, EdgeState.ABSENT):
             self._graph.add_node(src, var_name=src)
@@ -239,8 +243,10 @@ class ECCS:
             self._graph.add_edge(src, dst)
             target_state = EdgeState.SUGGESTED if is_suggested else EdgeState.PRESENT
             self._edge_states.mark_edge(src, dst, target_state)
+            return True
+        return False
 
-    def remove_edge(self, src: str, dst: str, remove_isolates: bool = False) -> None:
+    def remove_edge(self, src: str, dst: str, remove_isolates: bool = False) -> bool:
         """
         Remove an edge from the graph and then optionally remove any nodes with degree zero.
         Can only remove an edge if its current state is present.
@@ -249,6 +255,9 @@ class ECCS:
             src: The name of the source variable.
             dst: The name of the destination variable.
             remove_isolates: Whether to remove any nodes with degree zero after removing the edge.
+
+        Returns:
+            True if the edge was indeed removed, False otherwise.
         """
         if self._edge_states.is_edge_in_state(
             src, dst, EdgeState.PRESENT
@@ -257,6 +266,8 @@ class ECCS:
             if remove_isolates:
                 self._graph.remove_nodes_from(list(nx.isolates(self._graph)))
             self._edge_states.mark_edge(src, dst, EdgeState.ABSENT)
+            return True
+        return False
 
     def get_edge_state(self, src: str, dst: str) -> EdgeState:
         """
@@ -271,21 +282,25 @@ class ECCS:
         """
         return self._edge_states.get_edge_state(src, dst)
 
-    def fix_edge(self, src: str, dst: str) -> None:
+    def fix_edge(self, src: str, dst: str) -> bool:
         """
-        Mark an edge as fixed and mark its reverse as banned.
+        Mark an edge as fixed.
         Can only fix an edge if its current state is present.
 
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
+
+        Returns:
+            True if the edge was indeed fixed, False otherwise.
         """
 
         if self._edge_states.is_edge_in_state(src, dst, EdgeState.PRESENT):
             self._edge_states.mark_edge(src, dst, EdgeState.FIXED)
-            self._edge_states.mark_edge(dst, src, EdgeState.BANNED)
+            return True
+        return False
 
-    def ban_edge(self, src: str, dst: str) -> None:
+    def ban_edge(self, src: str, dst: str) -> bool:
         """
         Mark an edge as banned.
         Can only ban an edge if its current state is absent.
@@ -293,9 +308,14 @@ class ECCS:
         Parameters:
             src: The name of the source variable.
             dst: The name of the destination variable.
+
+        Returns:
+            True if the edge was indeed banned, False otherwise.
         """
         if self._edge_states.is_edge_in_state(src, dst, EdgeState.ABSENT):
             self._edge_states.mark_edge(src, dst, EdgeState.BANNED)
+            return True
+        return False
 
     def unban_edge(self, src: str, dst: str) -> None:
         """
@@ -603,14 +623,19 @@ class ECCS:
             A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
             if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
-        if len(self._cached_edit_options) > 0:
+        print("Computing and suggesting best single adjustment set change")
+        print(
+            f"The current cache size is {len(self._cached_edit_options)} and the acceptance test returns {self._cached_acceptance_test}"
+        )
+
+        if len(self._cached_edit_options) > 0 and self._cached_acceptance_test():
             print(
                 "Serving previous edge suggestion based on best single adjustment set change"
             )
             edit = self._cached_edit_options.pop(0)
+            self._cached_acceptance_test = self._check_if_edit_was_accepted(edit)
             return ([edit], self._cached_furthest_ate, 0)
 
-        print("Computing and suggesting best single adjustment set change")
         base_ate = self.get_ate()
         furthest_ate = self.get_ate()
         best_ate_diff = 0
@@ -670,7 +695,32 @@ class ECCS:
         num_best_edits = len(best_edits)
         if num_best_edits == 0:
             return ([], furthest_ate, 0)
-        return ([self._cached_edit_options.pop(0)], furthest_ate, num_best_edits)
+
+        edit_to_return = self._cached_edit_options.pop(0)
+        self._cached_acceptance_test = self._check_if_edit_was_accepted(edit_to_return)
+        return ([edit_to_return], furthest_ate, num_best_edits)
+
+    def _check_if_edit_was_accepted(self, edit: EdgeEdit) -> Callable[[], bool]:
+        """
+        Given an edit, return a lambda that will evaluate True if that edit could be the most
+        recent edit to have been applied to self._graph.
+
+        Parameters:
+            edit: The edit to evaluate.
+
+        Returns:
+            A lambda that will evaluate true if the edit could be the most
+            recent edit to have been applied to self._graph.
+        """
+        src, dst, edit_type = edit
+        if edit_type == EdgeEditType.ADD:
+            return lambda: self.graph.has_edge(src, dst)
+        elif edit_type == EdgeEditType.REMOVE:
+            return lambda: (not self.graph.has_edge(src, dst))
+        elif edit_type == EdgeEditType.FLIP:
+            return lambda: (
+                self.graph.has_edge(dst, src) and not self.graph.has_edge(src, dst)
+            )
 
     def _suggest_random_single_edge_change(
         self,
