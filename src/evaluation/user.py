@@ -277,7 +277,7 @@ class ECCSUser:
     def fresh_edits_trajectory(self) -> list[int]:
         """
         Returns the trajectory of the number of fresh edits per invocation over the invocations.
-        Edits are fresh when the underlying algorithm was actually invoked to produce them (as 
+        Edits are fresh when the underlying algorithm was actually invoked to produce them (as
         opposed to serving them from a cache).
 
         Returns:
@@ -285,9 +285,7 @@ class ECCSUser:
         """
         return self._fresh_edits_trajectory
 
-    def invoke_eccs(
-        self, method: str = None, budget: int = None
-    ) -> tuple[bool, int]:
+    def invoke_eccs(self, method: str = None, budget: int = None) -> tuple[bool, int]:
         """
         Invokes the ECCS system and updates the fixed and banned nodes accordingly.
 
@@ -313,40 +311,42 @@ class ECCSUser:
             f"In iteration {self._invocations + 1} ECCS suggested: {edits} in {self._invocation_duration_trajectory[-1]} seconds."
         )
         if len(edits) == 0:
-            return (False, num_fresh_edits)
-        for src, dst, edit_type in edits:
-            edge = (src, dst)
-            if edit_type == EdgeEditType.ADD and edge not in self._eccs.graph.edges():
-                if edge in self._true_graph.edges():
-                    self._eccs.add_edge(src, dst)
-                    self._eccs.fix_edge(src, dst)
+            return (False, 0)
+        for src, dst, _ in edits:
+            fadd = frem = ffix = fban = False
+            radd = rrem = rfix = rban = False
 
-                    print(f"\tThis led the user to add and fix the edge {src} -> {dst}")
-                else:
-                    self._eccs.ban_edge(src, dst)
-                    print(f"\tThis led the user to ban the edge {src} -> {dst}")
-            elif edit_type == EdgeEditType.REMOVE and edge in self._eccs.graph.edges():
-                if edge not in self._true_graph.edges():
-                    self._eccs.remove_edge(src, dst, remove_isolates=False)
-                    self._eccs.ban_edge(src, dst)
+            # The user produces the right judgement for the pair of (src, dst) regardless of the suggested edit type.
+            if (src, dst) in self._true_graph.edges():
+                fadd = self._eccs.add_edge(src, dst)
+                ffix = self._eccs.fix_edge(src, dst)
+                rrem = self._eccs.remove_edge(dst, src, remove_isolates=False)
+                rban = self._eccs.ban_edge(dst, src)
+            elif (dst, src) in self._true_graph.edges():
+                frem = self._eccs.remove_edge(src, dst, remove_isolates=False)
+                fban = self._eccs.ban_edge(src, dst)
+                radd = self._eccs.add_edge(dst, src)
+                rfix = self._eccs.fix_edge(dst, src)
+            else:
+                frem = self._eccs.remove_edge(src, dst, remove_isolates=False)
+                fban = self._eccs.ban_edge(src, dst)
+                rrem = self._eccs.remove_edge(dst, src, remove_isolates=False)
+                rban = self._eccs.ban_edge(dst, src)
 
-                    print(
-                        f"\tThis led the user to remove and ban the edge {src} -> {dst}"
-                    )
-                else:
-                    self._eccs.fix_edge(src, dst)
-                    print(f"\tThis led the user to fix the edge {src} -> {dst}")
-            elif edit_type == EdgeEditType.FLIP and edge in self._eccs.graph.edges():
-                if edge[::-1] in self._true_graph.edges():
-                    self._eccs.remove_edge(src, dst, remove_isolates=False)
-                    self._eccs.add_edge(dst, src)
-                    self._eccs.fix_edge(dst, src)
-                    print(
-                        f"\tThis led the user to flip the edge {src} -> {dst} and fix the edge {dst} -> {src}"
-                    )
-                else:
-                    self._eccs.ban_edge(dst, src)
-                    print(f"\tThis led the user to ban the edge {dst} -> {src}")
+            print(
+                f"\tUser judgement for edge {src} -> {dst}: "
+                + ("Add " if fadd else "")
+                + ("Remove " if frem else "")
+                + ("Fix " if ffix else "")
+                + ("Ban " if fban else "")
+            )
+            print(
+                f"\tUser judgement for edge {dst} -> {src}: "
+                + ("Add " if radd else "")
+                + ("Remove " if rrem else "")
+                + ("Fix " if rfix else "")
+                + ("Ban " if rban else "")
+            )
 
         # Update bookkeeping
         self._invocations += 1
