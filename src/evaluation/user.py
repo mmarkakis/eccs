@@ -17,7 +17,9 @@ class ECCSUser:
     The user knows the ground truth causal graph and responds to the system's suggestions
     accordingly.
     """
+
     ate_calculator = ATECalculator()
+
     def __init__(
         self,
         data: str | pd.DataFrame,
@@ -72,7 +74,7 @@ class ECCSUser:
         self._ate_trajectory = [self.current_ate]
         self._edit_disance_trajectory = [self.current_graph_edit_distance]
         self._invocation_duration_trajectory = []
-        self._edits_per_invocation_trajectory = []
+        self._fresh_edits_trajectory = []
 
         if fixed:
             for edge in fixed:
@@ -88,7 +90,9 @@ class ECCSUser:
                 state = self._eccs.get_edge_state(*edge)
                 if state == EdgeState.ABSENT:
                     self._eccs.ban_edge(*edge)
-                elif state != EdgeState.BANNED: # May be already banned because we fixed its reverse.
+                elif (
+                    state != EdgeState.BANNED
+                ):  # May be already banned because we fixed its reverse.
                     print(
                         f"Warning: Banned edge {edge} is not absent/banned from the graph. It has state {EdgeState(state)}. Skipping."
                     )
@@ -159,7 +163,7 @@ class ECCSUser:
             The difference between the current ATE and the true ATE, or
             None if either graph does not contain a directed path from the treatment to the outcome.
         """
-        #if not self.current_has_directed_path or not self.true_has_directed_path:
+        # if not self.current_has_directed_path or not self.true_has_directed_path:
         #    return None
         return self.current_ate - self.true_ate
 
@@ -270,16 +274,20 @@ class ECCSUser:
         return self._invocation_duration_trajectory
 
     @property
-    def edits_per_invocation_trajectory(self) -> list[int]:
+    def fresh_edits_trajectory(self) -> list[int]:
         """
-        Returns the trajectory of the number of edits per invocation over the invocations.
+        Returns the trajectory of the number of fresh edits per invocation over the invocations.
+        Edits are fresh when the underlying algorithm was actually invoked to produce them (as 
+        opposed to serving them from a cache).
 
         Returns:
-            The trajectory of the number of edits per invocation over the invocations.
+            The trajectory of the number of fresh edits per invocation over the invocations.
         """
-        return self._edits_per_invocation_trajectory
+        return self._fresh_edits_trajectory
 
-    def invoke_eccs(self, method: str = None, budget: int = None) -> bool:
+    def invoke_eccs(
+        self, method: str = None, budget: int = None
+    ) -> tuple[bool, int]:
         """
         Invokes the ECCS system and updates the fixed and banned nodes accordingly.
 
@@ -288,7 +296,8 @@ class ECCSUser:
             budget: The budget for the invocation. Not all methods use this.
 
         Returns:
-            Whether the invocation returned any changes.
+            A tuple containing whether any edits were suggested and how many fresh edits were produced
+            during this invocation.
         """
 
         if (method is None) or (method not in self._eccs.EDGE_SUGGESTION_METHODS):
@@ -296,15 +305,15 @@ class ECCSUser:
 
         # Get suggested modifications and selectively apply them
         start = datetime.now()
-        edits, ate, alg_invoked = self._eccs.suggest(method, budget)
+        edits, ate, num_fresh_edits = self._eccs.suggest(method, budget)
         end = datetime.now()
         self._invocation_duration_trajectory.append((end - start).total_seconds())
-        self._edits_per_invocation_trajectory.append(len(edits))
+        self._fresh_edits_trajectory.append(num_fresh_edits)
         print(
             f"In iteration {self._invocations + 1} ECCS suggested: {edits} in {self._invocation_duration_trajectory[-1]} seconds."
         )
         if len(edits) == 0:
-            return (False, alg_invoked)
+            return (False, num_fresh_edits)
         for src, dst, edit_type in edits:
             edge = (src, dst)
             if edit_type == EdgeEditType.ADD and edge not in self._eccs.graph.edges():
@@ -351,7 +360,7 @@ class ECCSUser:
         print(
             f"\tUpdated edit distance: {self.current_graph_edit_distance} (from {self.edit_distance_trajectory[-2]})"
         )
-        return (True, alg_invoked)
+        return (True, num_fresh_edits)
 
     def run(self, steps: int, method: str = None, budget: int = None) -> None:
         """
@@ -366,16 +375,25 @@ class ECCSUser:
 
         for i in range(steps):
             print(f"Running iteration {i + 1}")
-            suggested_edits, alg_invoked = self.invoke_eccs(method, budget)
-            if alg_invoked:
+            suggested_edits, num_fresh_edits = self.invoke_eccs(method, budget)
+            if num_fresh_edits > 0:
                 self._eccs_algorithm_invocation_iters.append(i)
             if not suggested_edits:
                 print(
-                    "ECCS suggested no changes. Stopping. Total suggested edits over time: ",
-                    sum(self._edits_per_invocation_trajectory),
-                    "Final edit distance: ", self.current_graph_edit_distance, 
-                    "Final ATE: ", self.current_ate,
-                    "Final ATE difference: ", self.current_ate_diff
+                    "ECCS suggested no changes. Stopping. ",
+                    "Total fresh edits produced over time: ",
+                    sum(self._fresh_edits_trajectory),
+                    "Total algorithm invocations: ",
+                    len(self._eccs_algorithm_invocation_iters),
+                    "Final edit distance: ",
+                    self.current_graph_edit_distance,
+                    "Final ATE: ",
+                    self.current_ate,
+                    "Final ATE difference: ",
+                    self.current_ate_diff,
                 )
                 break
-        print("The specific ECCS Algorithm was invoked in the following steps: ", self._eccs_algorithm_invocation_iters)
+        print(
+            "The specific ECCS Algorithm was invoked in the following steps: ",
+            self._eccs_algorithm_invocation_iters,
+        )

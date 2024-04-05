@@ -239,11 +239,11 @@ def plot_invocation_duration(
     return retval
 
 
-def plot_edits_per_invocation(
+def plot_fresh_edits(
     ax: Axes, method: str, points: int, base_path: str
 ) -> float:
     """
-    Plots the numbert of edits for each invocation for the given method.
+    Plots the number of fresh edits for each invocation for the given method.
 
     Parameters:
         ax: The axis to plot on.
@@ -264,7 +264,7 @@ def plot_edits_per_invocation(
         return 0
 
     for filename in os.listdir(path):
-        if filename.endswith("edits_per_invocation_trajectory.npy"):
+        if filename.endswith("fresh_edits_trajectory.npy"):
             # Load the list from the file
             filepath = os.path.join(path, filename)
             data = np.load(filepath)
@@ -378,7 +378,7 @@ def wrapup_plot(
 
     # Deal with the figure
     ax.tick_params(axis="both", which="major", labelsize=FONTSIZE)
-    ax.set_xlabel("User Interaction Index", fontsize=FONTSIZE)
+    ax.set_xlabel(r"\textsf{User} Judgement \#", fontsize=FONTSIZE)
     ax.set_xticks(np.arange(0, num_points, 2))
     ax.legend(fontsize=FONTSIZE)
     if log_y_axis:
@@ -455,19 +455,19 @@ def plotter(path: str, skip: bool = False):
             log_y_axis=True,
         )
 
-    ### Edits per Invocation
-    print("Plotting Edits per Invocation...")
-    if skip and os.path.exists(os.path.join(plots_path, "edits_per_invocation.png")):
-        print("Skipping Edits per Invocation plot")
+    ### Number of fresh edits
+    print("Plotting Fresh Edits...")
+    if skip and os.path.exists(os.path.join(plots_path, "fresh_edits.png")):
+        print("Skipping Fresh Edits plot")
     else:
         _, ax = plt.subplots()
         max_y = 0
         for method in LINE_FORMATTING_DATA:
-            max_y = max(max_y, plot_edits_per_invocation(ax, method, num_points, path))
+            max_y = max(max_y, plot_fresh_edits(ax, method, num_points, path))
 
-        ax.set_ylabel(r"\# Suggested Edits", fontsize=FONTSIZE)
+        ax.set_ylabel(r"\# Fresh Edits", fontsize=FONTSIZE)
         wrapup_plot(
-            os.path.join(plots_path, "edits_per_invocation"), ax, max_y, num_points
+            os.path.join(plots_path, "fresh_edits"), ax, max_y, num_points
         )
 
     ### Fraction of experiments with zero ATE difference at that round

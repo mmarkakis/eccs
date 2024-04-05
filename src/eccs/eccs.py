@@ -380,7 +380,7 @@ class ECCS:
 
     def suggest(
         self, method: str, budget: Optional[int] = None
-    ) -> tuple[list[EdgeEdit], float, bool]:
+    ) -> tuple[list[EdgeEdit], float, int]:
         """
         Suggest a modification to the graph that yields a maximally different ATE,
         compared to the current ATE. The modification should not edit edges that are
@@ -391,8 +391,8 @@ class ECCS:
             budget: The budget for finding a suggestion. Not all methods use this.
 
         Returns:
-          A tuple containing a list of the suggested edge edit(s), the resulting ATE and
-          whether fresh computation was involved in producing the suggestion.
+          A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
+          if the underlying algorithm was invoked anew, the total number of edits it produced.
 
         Raises:
             ValueError: If `method` is not in ECCS.EDGE_SUGGESTION_METHODS.
@@ -486,13 +486,13 @@ class ECCS:
 
     def _suggest_best_single_edge_change(
         self,
-    ) -> Tuple[list[EdgeEdit], float, bool]:
+    ) -> Tuple[list[EdgeEdit], float, int]:
         """
         Suggest the best_single_edge_change that maximally changes the ATE.
 
         Returns:
-            A tuple containing a list of the suggested edge edit(s), the resulting ATE and
-            whether fresh computation was involved in producing the suggestion.
+            A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
+            if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
         base_ate = self.get_ate()
         furthest_ate = self.get_ate()
@@ -555,11 +555,11 @@ class ECCS:
                     ate = self._edit_and_get_ate([EdgeEdit(e2, e1, EdgeEditType.FLIP)])
                     maybe_update_best(ate, [EdgeEdit(e2, e1, EdgeEditType.FLIP)])
 
-        return (best_edits, furthest_ate, True)  # True since invoked for every edge
+        return (best_edits, furthest_ate, 1)
 
     def _suggest_best_single_edge_change_heuristic(
         self, budget: Optional[int] = None
-    ) -> Tuple[list[EdgeEdit], float, bool]:
+    ) -> Tuple[list[EdgeEdit], float, int]:
         """
         Suggest the best single edge change based on A star
 
@@ -567,12 +567,12 @@ class ECCS:
             budget: The budget for the search.
 
         Returns:
-            A tuple containing a list of the suggested edge edit(s), the resulting ATE and
-            whether fresh computation was involved in producing the suggestion.
+            A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
+            if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
         if len(self._cached_edit_options) > 0:
             edit = self._cached_edit_options.pop(0)
-            return ([edit], self._edit_and_get_ate([edit]), False)
+            return ([edit], self._edit_and_get_ate([edit]), 0)
         a_star = AStarSearch(
             self._graph,
             self._treatment,
@@ -584,27 +584,31 @@ class ECCS:
         edits = a_star.astar()
         self._cached_edit_options = edits[: self.A_STAR_NUM_SUGGESTIONS_PER_INVOCATION]
         edit = self._cached_edit_options.pop(0)
-        res = ([edit], self._edit_and_get_ate([edit]), True)
+        res = (
+            [edit],
+            self._edit_and_get_ate([edit]),
+            self.A_STAR_NUM_SUGGESTIONS_PER_INVOCATION,
+        )
 
         # return ([edit], self._edit_and_get_ate([edit]), True) # TODO: FIXME
         return res
 
     def _suggest_best_single_adjustment_set_change(
         self,
-    ) -> Tuple[list[EdgeEdit], float, bool]:
+    ) -> Tuple[list[EdgeEdit], float, int]:
         """
         Suggest the best_single_adjustment_set_changes that maximally changes the ATE.
 
         Returns:
-            A tuple containing a list of the suggested edge edit(s), the resulting ATE and
-          whether fresh computation was involved in producing the suggestion.
+            A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
+            if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
         if len(self._cached_edit_options) > 0:
             print(
                 "Serving previous edge suggestion based on best single adjustment set change"
             )
             edit = self._cached_edit_options.pop(0)
-            return ([edit], self._cached_furthest_ate, False)
+            return ([edit], self._cached_furthest_ate, 0)
 
         print("Computing and suggesting best single adjustment set change")
         base_ate = self.get_ate()
@@ -667,19 +671,20 @@ class ECCS:
         print("Done evaluating options")
         self._cached_furthest_ate = furthest_ate
         self._cached_edit_options = best_edits
-        if len(best_edits) == 0:
-            return ([], furthest_ate, True)
-        return ([self._cached_edit_options.pop(0)], furthest_ate, True)
+        num_best_edits = len(best_edits)
+        if num_best_edits == 0:
+            return ([], furthest_ate, 0)
+        return ([self._cached_edit_options.pop(0)], furthest_ate, num_best_edits)
 
     def _suggest_random_single_edge_change(
         self,
-    ) -> Tuple[list[EdgeEdit], float, bool]:
+    ) -> Tuple[list[EdgeEdit], float, int]:
         """
         Suggest a random_single_edge_change.
 
         Returns:
-            A tuple containing a list of the suggested edge edit(s), the resulting ATE and
-            whether fresh computation was involved in producing the suggestion.
+            A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
+            if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
 
         # Derive the set of editable edges
@@ -712,4 +717,4 @@ class ECCS:
             if ate == None:
                 continue
 
-            return ([edit], ate, True)
+            return ([edit], ate, 1)
