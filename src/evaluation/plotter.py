@@ -207,6 +207,18 @@ def plot_invocation_duration(
             filepath = os.path.join(path, filename)
             data = np.load(filepath)
 
+            # Load the freshness data to compute rounds
+            fresh_filepath = filepath.replace("invocation_duration", "fresh_edits")
+            fresh_data = np.load(fresh_filepath)
+
+            # Set latency to 0 for rounds where there were no fresh edits
+            for i, v in enumerate(fresh_data):
+                if v == 0:
+                    data[i] = 0
+
+            # Convert to rounds by removing all 0s from the list
+            data = [x for x in data if x > 0]
+
             for i in range(len(data)):
                 file_counts[i + 1] += 1
 
@@ -227,6 +239,7 @@ def plot_invocation_duration(
     retval = max(elementwise_average)
 
     elementwise_average[0] = None
+    elementwise_average = [x for x in elementwise_average if x is None or x > 0]
 
     ax.plot(
         range(len(elementwise_average)),
@@ -269,8 +282,11 @@ def plot_fresh_edits(
             filepath = os.path.join(path, filename)
             data = np.load(filepath)
 
+            # Convert to rounds by removing all 0s from the list
+            data = [x for x in data if x > 0]
+
             for i in range(len(data)):
-                file_counts[i + 1] += 1 if data[i] > 0 else 0
+                file_counts[i + 1] += (1 if data[i] > 0 else 0)
 
             if len(data) < points:
                 orig_len = len(data)
@@ -290,9 +306,13 @@ def plot_fresh_edits(
         i / j if j != 0 else 0 for i, j in zip(accumulator, file_counts)
     ]
 
+    if method == 'best_single_adjustment_set_change':
+        print(file_counts)
+
     retval = max(elementwise_average)
 
     elementwise_average[0] = None
+    elementwise_average = [x for x in elementwise_average if x is None or x > 0]
 
     ax.plot(
         range(len(elementwise_average)),
@@ -354,7 +374,7 @@ def plot_zero_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> fl
 
 
 def wrapup_plot(
-    filename: str, ax: Axes, max_val: float, num_points: int, log_y_axis: bool = False
+    filename: str, ax: Axes, max_val: float, log_y_axis: bool = False, x_unit: str = "Judgement"
 ) -> None:
     """
     Set final formatting for the plot and save it to a file. Also print stats about the plotted
@@ -364,26 +384,29 @@ def wrapup_plot(
         filename: The name of the file to save the plot to.
         ax: The axis to save.
         maxes: The maximum value of the plotted data.
-        num_points: The number of points to plot.
         log_y_axis: Whether to use a log scale for the y-axis.
+        x_unit: The units of the x axis ("Judgement" or "Round")
     """
 
     # Deal with the stats
+    num_points = 0
     with open(filename + ".csv", "w") as f:
         f.write("label,last_y,average_y\n")
         for line in ax.get_lines():
             y_data = line.get_ydata()
+            if len(y_data) > num_points:
+                num_points = len(y_data)
             y_data = [x for x in y_data if x is not None]
             f.write(f"{line.get_label()},{y_data[-1]},{np.mean(y_data)}\n")
 
     # Deal with the figure
     ax.tick_params(axis="both", which="major", labelsize=FONTSIZE)
-    ax.set_xlabel(r"\textsf{User} Judgement \#", fontsize=FONTSIZE)
+    ax.set_xlabel(f"{x_unit} \#", fontsize=FONTSIZE)
     ax.set_xticks(np.arange(0, num_points, 2))
     ax.legend(fontsize=FONTSIZE)
     if log_y_axis:
         ax.set_yscale("log")
-        ax.set_ylim(0.001, 1.1 * max_val)
+        ax.set_ylim(0.001, 10 ** (1.1 * np.log10(max_val)))
     else:
         ax.set_ylim(0, 1.1 * max_val)
     plt.tight_layout()
@@ -422,7 +445,7 @@ def plotter(path: str, skip: bool = False):
                 plot_edit_distance(ax, method, num_points, path),
             )
         ax.set_ylabel("Graph Edit Distance", fontsize=FONTSIZE)
-        wrapup_plot(os.path.join(plots_path, "edit_distance"), ax, max_y, num_points)
+        wrapup_plot(os.path.join(plots_path, "edit_distance"), ax, max_y)
 
     ### ATE difference
     print("Plotting ATE difference...")
@@ -434,7 +457,7 @@ def plotter(path: str, skip: bool = False):
         for method in LINE_FORMATTING_DATA:
             max_y = max(max_y, plot_ate_diff(ax, method, num_points, path))
         ax.set_ylabel("ARE_ATE", fontsize=FONTSIZE)
-        wrapup_plot(os.path.join(plots_path, "ate_error"), ax, max_y, num_points)
+        wrapup_plot(os.path.join(plots_path, "ate_error"), ax, max_y)
 
     ### Invocation Duration
     print("Plotting Invocation Duration...")
@@ -446,13 +469,13 @@ def plotter(path: str, skip: bool = False):
         for method in LINE_FORMATTING_DATA:
             max_y = max(max_y, plot_invocation_duration(ax, method, num_points, path))
 
-        ax.set_ylabel("Latency (s)", fontsize=FONTSIZE)
+        ax.set_ylabel("ECCS Latency (s)", fontsize=FONTSIZE)
         wrapup_plot(
             os.path.join(plots_path, "invocation_duration"),
             ax,
             max_y,
-            num_points,
             log_y_axis=True,
+            x_unit="Round",
         )
 
     ### Number of fresh edits
@@ -467,7 +490,7 @@ def plotter(path: str, skip: bool = False):
 
         ax.set_ylabel(r"\# Fresh Edits", fontsize=FONTSIZE)
         wrapup_plot(
-            os.path.join(plots_path, "fresh_edits"), ax, max_y, num_points
+            os.path.join(plots_path, "fresh_edits"), ax, max_y, x_unit="Round"
         )
 
     ### Fraction of experiments with zero ATE difference at that round
@@ -481,7 +504,7 @@ def plotter(path: str, skip: bool = False):
             max_y = max(max_y, plot_zero_ate_diff(ax, method, num_points, path))
 
         ax.set_ylabel("Fraction of Experiments with\nZero ARE_ATE", fontsize=FONTSIZE)
-        wrapup_plot(os.path.join(plots_path, "zero_ate_diff"), ax, max_y, num_points)
+        wrapup_plot(os.path.join(plots_path, "zero_ate_diff"), ax, max_y, x_unit="Round")
 
 
 if __name__ == "__main__":
