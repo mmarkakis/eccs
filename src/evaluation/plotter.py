@@ -30,18 +30,19 @@ LINE_FORMATTING_DATA = {
         "marker": "o",
         "path": "best_single_edge_change",
     },
+    "astar_single_edge_change": {
+        "label": r"\textsc{HeuristicEdit}",
+        "color": "#ba8a7f",
+        "marker": "o",
+        "path": "astar_single_edge_change",
+    },
     "best_single_adjustment_set_change": {
         "label": r"\textsc{AdjSetEdit}",
         "color": "#7FBA82",
         "marker": "o",
         "path": "best_single_adjustment_set_change",
     },
-    "astar_single_edge_change": {
-        "label": r"\textsc{AStarEdit}",
-        "color": "#ba8a7f",
-        "marker": "o",
-        "path": "astar_single_edge_change",
-    },
+    
 }
 
 FONTSIZE = 20
