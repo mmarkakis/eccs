@@ -375,7 +375,7 @@ def plot_zero_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> fl
 
 
 def wrapup_plot(
-    filename: str, ax: Axes, max_val: float, log_y_axis: bool = False, x_unit: str = "Judgement"
+    filename: str, ax: Axes, max_val: float, log_y_axis: bool = False, x_unit: str = "Judgment"
 ) -> None:
     """
     Set final formatting for the plot and save it to a file. Also print stats about the plotted
@@ -386,7 +386,7 @@ def wrapup_plot(
         ax: The axis to save.
         maxes: The maximum value of the plotted data.
         log_y_axis: Whether to use a log scale for the y-axis.
-        x_unit: The units of the x axis ("Judgement" or "Round")
+        x_unit: The units of the x axis ("Judgment" or "Round")
     """
 
     # Deal with the stats
