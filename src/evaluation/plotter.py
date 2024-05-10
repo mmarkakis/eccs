@@ -42,7 +42,6 @@ LINE_FORMATTING_DATA = {
         "marker": "o",
         "path": "best_single_adjustment_set_change",
     },
-    
 }
 
 FONTSIZE = 20
@@ -410,6 +409,19 @@ def wrapup_plot(
         ax.set_ylim(0.001, 10 ** (1.1 * np.log10(max_val)))
     else:
         ax.set_ylim(0, 1.1 * max_val)
+    if False: # These are the hard-coded y limits for /home/markakis/eccs/evaluation/2024-04-05 12:10:57.816692
+        if "edit_distance" in filename:
+            ax.set_ylim(0, 24.432597305389223)
+        elif "ate_error" in filename:
+            ax.set_ylim(0, 0.6739732398970182)
+        elif "invocation_duration" in filename:
+            ax.set_ylim(0.001, 253.37828732457606)
+        elif "fresh_edits" in filename:
+            ax.set_ylim(0, 4.776765147721583)
+        elif "zero_ate_diff" in filename:
+            ax.set_ylim(0, 0.8694610778443115)
+
+
     plt.tight_layout()
     plt.savefig(filename + ".png", dpi=300)
     plt.cla()
