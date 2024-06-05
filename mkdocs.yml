@@ -1,0 +1,87 @@
+site_name: ECCS
+
+theme:
+  name: material
+  language: en
+
+  features:
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.path
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - content.code.copy
+
+  palette: 
+
+    # Palette toggle for light mode
+    - scheme: default
+      primary: green
+      accent: amber
+      toggle:
+        icon: material/weather-night 
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: green
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+
+plugins:
+- search
+- gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+- literate-nav:
+    nav_file: docs/SUMMARY.md
+- section-index
+- mkdocstrings:
+    handlers:
+      python:
+        setup_commands:
+            - import sys
+            - sys.path.append("src")
+        paths: [src]
+        options:
+            docstring_style: google
+            docstring_options:
+              show_if_no_docstring: true
+            show_source: true
+            members_order: "source"
+            filters: [".*"]
+            show_type_annotations: true
+
+nav:
+  - Home: index.md
+  - Docs: 
+    - ECCS: 
+      - "ATE": reference/eccs/ate.md
+      - "ECCS": reference/eccs/eccs.md
+      - "EdgeStateMatrix": reference/eccs/edge_state_matrix.md
+      - "Edges": reference/eccs/edges.md
+      - "GraphRenderer": reference/eccs/graph_renderer.md
+      - "HeuristicSearch": reference/eccs/heuristic_search.md
+      - "MapAdjSetToGraph": reference/eccs/map_adj_set_to_graph.md
+    - Generators:
+      - "RandomDAGGenerator": reference/generators/random_dag_generator.md
+      - "RandomDatasetGenerator": reference/generators/random_dataset_generator.md
+
+  
+markdown_extensions:
+    - markdown_include.include:
+        base_path: .
+    - pymdownx.highlight:
+        anchor_linenums: true
+        line_spans: __span
+        pygments_lang_class: true
+    - pymdownx.inlinehilite
+    - pymdownx.snippets
+    - pymdownx.superfences
+    - tables

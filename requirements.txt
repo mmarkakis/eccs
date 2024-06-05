@@ -13,3 +13,17 @@ streamlit-extras>=0.4.0
 stqdm>=0.0.5
 tqdm>=4.66.2
 numpy
+
+
+mkdocs-material 
+mkdocs-gen-files 
+mkdocs-literate-nav 
+markdown_include 
+pymdown-extensions 
+markdown 
+Pygments 
+mkdocs-jupyter 
+mkdocstrings-python 
+mkdocstrings 
+mdx_include
+mkdocs-section-index
