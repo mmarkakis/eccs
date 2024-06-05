@@ -2,7 +2,7 @@ import argparse
 import yaml
 import sys
 
-sys.path.append("../..")
+sys.path.append(".")
 from src.generators.random_dag_generator import RandomDAGGenerator
 from src.generators.random_dataset_generator import RandomDatasetGenerator
 from src.evaluation.user import ECCSUser
@@ -165,19 +165,22 @@ def simulate(
 
 
 async def main():
+    # Get the absolute path to the directory containing this file.
+    current_file_path = os.path.abspath(__file__)
+    current_directory = os.path.dirname(current_file_path)
 
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
         "--config-path",
         type=str,
-        default="./iterative_config.yml",
+        default=os.path.join(current_directory, "iterative_config.yml"),
         help="Configuration file path",
     )
     parser.add_argument(
         "--out-path",
         type=str,
-        default="../../evaluation/",
+        default=os.path.join(current_directory, "../../evaluation/"),
         help="Output directory path",
     )
     args = parser.parse_args()
