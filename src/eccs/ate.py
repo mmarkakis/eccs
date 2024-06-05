@@ -40,8 +40,8 @@ class ATECalculator:
 
         Parameters:
             data: The data to be used for causal analysis.
-            treatment_idx: The name or index of the treatment variable.
-            outcome_idx: The name or index of the outcome variable.
+            treatment: The name or index of the treatment variable.
+            outcome: The name or index of the outcome variable.
             graph: The graph to be used for causal analysis. If not specified, a two-node graph with just
                 `treatment` and `outcome` is used.
             calculate_p_value: Whether to calculate the P-value of the ATE.

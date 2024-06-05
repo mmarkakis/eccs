@@ -383,7 +383,7 @@ def wrapup_plot(
     Parameters:
         filename: The name of the file to save the plot to.
         ax: The axis to save.
-        maxes: The maximum value of the plotted data.
+        max_val: The maximum value of the plotted data.
         log_y_axis: Whether to use a log scale for the y-axis.
         x_unit: The units of the x axis ("Judgment" or "Round")
     """
@@ -401,7 +401,7 @@ def wrapup_plot(
 
     # Deal with the figure
     ax.tick_params(axis="both", which="major", labelsize=FONTSIZE)
-    ax.set_xlabel(f"{x_unit} \#", fontsize=FONTSIZE)
+    ax.set_xlabel(f"{x_unit} " + r"\#", fontsize=FONTSIZE)
     ax.set_xticks(np.arange(0, num_points, 2))
     ax.legend(fontsize=FONTSIZE)
     if log_y_axis:

@@ -227,7 +227,7 @@ class EdgeStateMatrix:
         return self._all_edges_in_state(EdgeState.BANNED)
 
     # Implement a copy method
-    def copy(self):
+    def copy(self) -> EdgeStateMatrix:
         """
         Create a copy of the edge state matrix.
 
