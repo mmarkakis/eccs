@@ -7,3 +7,5 @@ datasets/*/*.csv
 evaluation/**/*
 
 **scratch**
+
+**/.DS_Store
