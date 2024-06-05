@@ -4,7 +4,7 @@ Welcome to the repository for the ECCS project! For technical details about the 
 
 ## Table of Contents
 
-1. [Setting up a virtual environment and installing dependencies](#setting-up-a-virtual-environment-and-installing-dependencies).
+1. [Setting up a virtual environment and installing dependencies](#1-setting-up-a-virtual-environment-and-installing-dependencies).
 
 2. [Reading the documentation](#2-reading-the-documentation)
 
@@ -71,3 +71,5 @@ mkdocs serve
 ```
 
 ## 3. Reproducing our evaluation
+
+Coming soon! 
