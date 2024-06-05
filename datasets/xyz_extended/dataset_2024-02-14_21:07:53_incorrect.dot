@@ -1,5 +1,0 @@
-digraph G {
-x -> y;
-var_62 -> x;
-var_62 -> y;
-}
