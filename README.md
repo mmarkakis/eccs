@@ -1,14 +1,16 @@
 # ECCS: Exposing Critical Causal Structures
 
-Welcome to the repository for the ECCS project! For technical details about the project, [read our paper here](https://people.csail.mit.edu/markakis/papers/2024_ECCS.pdf).
+Welcome to the repository for the ECCS project! You can access the documentation [here](https://mmarkakis.github.io/eccs/).
+
+For technical details about the project, you can [read our paper](https://people.csail.mit.edu/markakis/papers/2024_ECCS.pdf). 
 
 ## Table of Contents
 
 1. [Setting up a virtual environment and installing dependencies](#1-setting-up-a-virtual-environment-and-installing-dependencies).
 
-2. [Reading the documentation](#2-reading-the-documentation)
+2. [Reproducing our evaluation](#2-reproducing-our-evaluation)
 
-3. [Reproducing our evaluation](#3-reproducing-our-evaluation)
+3. [Rebuilding the documentation](#3-rebuilding-the-documentation)
 
 
 ## 1. Setting up a virtual environment and installing dependencies
@@ -62,14 +64,16 @@ deactivate
 
 This command will return you to your system's default Python interpreter.
 
-## 2. Reading the documentation
-
-To take a look at the documentation, run the following command from the root of this repository and follow the generated link:
-
-```bash
-mkdocs serve
-```
-
-## 3. Reproducing our evaluation
+## 2. Reproducing our evaluation
 
 Coming soon! 
+
+## 3. Rebuilding the documentation
+
+To rebuild the documentation after editing the code, you can run:
+
+```bash
+mkdocs gh-deploy
+```
+
+

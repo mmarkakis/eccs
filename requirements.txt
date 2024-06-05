@@ -27,3 +27,4 @@ mkdocstrings-python
 mkdocstrings 
 mdx_include
 mkdocs-section-index
+mkdocs-material
