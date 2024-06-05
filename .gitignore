@@ -6,3 +6,5 @@ evaluation/**/*
 **/.DS_Store
 
 site/
+dist/
+src/*egg*/

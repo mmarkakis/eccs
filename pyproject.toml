@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eccs"
+version = "0.0.1"
+authors = [
+  { name="Markos Markakis", email="markakis@mit.edu"},
+  { name="Sylvia Ziyu Zhang", email="sylziyuz@mit.edu"},
+]
+description = "Code for the 'Exposing Critical Causal Structures' project."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Code = "https://github.com/mmarkakis/eccs"
+Docs = "https://mmarkakis.github.io/eccs/"
