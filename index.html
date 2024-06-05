@@ -941,10 +941,15 @@
 </span></code></pre></div>
 <p>This command will return you to your system's default Python interpreter.</p>
 <h2 id="2-reproducing-our-evaluation">2. Reproducing our evaluation</h2>
-<p>Coming soon! </p>
+<p>Reproducing our evaluation is super easy! Just run the following command from the root of this repository (within the virtual environment you created above):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>python3<span class="w"> </span>src/evaluation/iterative_runner.py
+</span></code></pre></div>
+<p>An experimental directory will be created under <code>evaluation/</code>, named after the current timestamp <code>&lt;ts&gt;</code>. After the experimental run completes, you will be able to find plots like the ones included in <a href="https://people.csail.mit.edu/markakis/papers/2024_ECCS.pdf">Figure 2 of our paper</a> under <code>evaluation/&lt;ts&gt;/plots/</code>. Note that each experimental run creates new ground truth causal graphs, datasets, and starting causal graphs, so your plots may vary from the results in the paper.</p>
+<p>You can edit <code>src/evaluation/iterative_config.yml</code> to adjust any experimental parameters.</p>
+<p>NOTE: Running all of the experiments in our evaluation can take several hours, depending on your hardware. You may want to use a tool like <a href="https://github.com/tmux/tmux/wiki">tmux</a> to run the above command in the background.</p>
 <h2 id="3-rebuilding-the-documentation">3. Rebuilding the documentation</h2>
 <p>To rebuild the documentation after editing the code, you can run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>mkdocs<span class="w"> </span>gh-deploy
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mkdocs<span class="w"> </span>gh-deploy
 </span></code></pre></div>
 
 
