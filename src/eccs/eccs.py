@@ -399,7 +399,7 @@ class ECCS:
         )["ATE"]
 
     def suggest(
-        self, method: str, budget: Optional[int] = None
+        self, method: str, budget: Optional[int] = None, max_results: int = None
     ) -> tuple[list[EdgeEdit], float, int]:
         """
         Suggest a modification to the graph that yields a maximally different ATE,
@@ -409,6 +409,8 @@ class ECCS:
         Parameters:
             method: The method to use for suggestion. Must be in ECCS.EDGE_SUGGESTION_METHODS.
             budget: The budget for finding a suggestion. Not all methods use this.
+            max_results: The maximum number of edits to return. The rest, if any, may be cached.
+                If None, all suggested edits are returned.
 
         Returns:
           A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
@@ -424,11 +426,15 @@ class ECCS:
         if method == "best_single_edge_change":
             return self._suggest_best_single_edge_change()
         elif method == "best_single_adjustment_set_change":
-            return self._suggest_best_single_adjustment_set_change()
+            return self._suggest_best_single_adjustment_set_change(
+                max_results=max_results
+            )
         elif method == "random_single_edge_change":
             return self._suggest_random_single_edge_change()
         elif method == "astar_single_edge_change":
-            return self._suggest_best_single_edge_change_heuristic(budget)
+            return self._suggest_best_single_edge_change_heuristic(
+                budget, max_results=max_results
+            )
 
     def _edit_and_get_ate(self, edits: list[EdgeEdit]) -> Optional[float]:
         """
@@ -577,22 +583,40 @@ class ECCS:
 
         return (best_edits, furthest_ate, 1)
 
+    @staticmethod
+    def _pop_n(l: list, n: int):
+        """
+        Pop `n` elements from the start of list `l` and return them.
+
+        Parameters:
+            l: The list to pop from.
+            n: The number of elements to pop.
+
+        Returns:
+            The popped elements.
+        """
+        elements = l[:n]
+        l[:] = l[n:]
+        return elements
+
     def _suggest_best_single_edge_change_heuristic(
-        self, budget: Optional[int] = None
+        self, budget: Optional[int] = None, max_results: int = None
     ) -> Tuple[list[EdgeEdit], float, int]:
         """
         Suggest the best single edge change based on A star
 
         Parameters:
             budget: The budget for the search.
+            max_results: The maximum number of edits to return. The rest, if any, are cached.
+                If None, all suggested edits are returned.
 
         Returns:
             A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
             if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
         if len(self._cached_edit_options) > 0:
-            edit = self._cached_edit_options.pop(0)
-            return ([edit], self._edit_and_get_ate([edit]), 0)
+            edits = ECCS._pop_n(self._cached_edit_options, max_results)
+            return (edits, self._edit_and_get_ate(edits), 0)
         a_star = AStarSearch(
             self._graph,
             self._treatment,
@@ -603,10 +627,10 @@ class ECCS:
         )
         edits = a_star.astar()
         self._cached_edit_options = edits[: self.A_STAR_NUM_SUGGESTIONS_PER_INVOCATION]
-        edit = self._cached_edit_options.pop(0)
+        edits = ECCS._pop_n(self._cached_edit_options, max_results)
         res = (
-            [edit],
-            self._edit_and_get_ate([edit]),
+            edits,
+            self._edit_and_get_ate(edits),
             self.A_STAR_NUM_SUGGESTIONS_PER_INVOCATION,
         )
 
@@ -614,10 +638,14 @@ class ECCS:
         return res
 
     def _suggest_best_single_adjustment_set_change(
-        self,
+        self, max_results: int = None
     ) -> Tuple[list[EdgeEdit], float, int]:
         """
         Suggest the best_single_adjustment_set_changes that maximally changes the ATE.
+
+        Parameters:
+            max_results: The maximum number of edits to return. The rest, if any, are cached.
+                If None, all suggested edits are returned.
 
         Returns:
             A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
@@ -630,11 +658,11 @@ class ECCS:
 
         if len(self._cached_edit_options) > 0 and self._cached_acceptance_test():
             print(
-                "Serving previous edge suggestion based on best single adjustment set change"
+                "Serving previous edge suggestion(s) based on best single adjustment set change"
             )
-            edit = self._cached_edit_options.pop(0)
-            self._cached_acceptance_test = self._check_if_edit_was_accepted(edit)
-            return ([edit], self._cached_furthest_ate, 0)
+            edits = ECCS._pop_n(self._cached_edit_options, max_results)
+            self._cached_acceptance_test = self._check_if_edits_were_accepted(edits)
+            return (edits, self._cached_furthest_ate, 0)
 
         base_ate = self.get_ate()
         furthest_ate = self.get_ate()
@@ -690,20 +718,31 @@ class ECCS:
             maybe_update_best(ate, edits)
 
         print("Done evaluating options")
-        self._cached_furthest_ate = furthest_ate
-        self._cached_edit_options = best_edits
         num_best_edits = len(best_edits)
         if num_best_edits == 0:
             return ([], furthest_ate, 0)
+        elif (max_results is None) or (
+            num_best_edits <= max_results
+        ):  # No need to cache edits
+            self._cached_furthest_ate = furthest_ate
+            self._cached_edit_options = []
+            self._cached_acceptance_test = None
+            return (best_edits, furthest_ate, num_best_edits)
+        else:  # Must cache some edits
+            self._cached_furthest_ate = furthest_ate
+            self._cached_edit_options = best_edits
+            edits_to_return = ECCS._pop_n(self._cached_edit_options, max_results)
+            self._cached_acceptance_test = self._check_if_edits_were_accepted(
+                edits_to_return
+            )
+            return (edits_to_return, furthest_ate, num_best_edits)
 
-        edit_to_return = self._cached_edit_options.pop(0)
-        self._cached_acceptance_test = self._check_if_edit_was_accepted(edit_to_return)
-        return ([edit_to_return], furthest_ate, num_best_edits)
-
-    def _check_if_edit_was_accepted(self, edit: EdgeEdit) -> Callable[[], bool]:
+    def _check_if_edits_were_accepted(
+        self, edits: list[EdgeEdit]
+    ) -> Callable[[], bool]:
         """
-        Given an edit, return a lambda that will evaluate True if that edit could be the most
-        recent edit to have been applied to self._graph.
+        Given a list of edits, return a lambda that will evaluate True if those edits could be the most
+        recent edits to have been applied to self._graph.
 
         Parameters:
             edit: The edit to evaluate.
@@ -712,15 +751,21 @@ class ECCS:
             A lambda that will evaluate true if the edit could be the most
             recent edit to have been applied to self._graph.
         """
-        src, dst, edit_type = edit
-        if edit_type == EdgeEditType.ADD:
-            return lambda: self.graph.has_edge(src, dst)
-        elif edit_type == EdgeEditType.REMOVE:
-            return lambda: (not self.graph.has_edge(src, dst))
-        elif edit_type == EdgeEditType.FLIP:
-            return lambda: (
-                self.graph.has_edge(dst, src) and not self.graph.has_edge(src, dst)
-            )
+        lambdas = []
+        for src, dst, edit_type in edits:
+            if edit_type == EdgeEditType.ADD:
+                lambdas.append(lambda: self.graph.has_edge(src, dst))
+            elif edit_type == EdgeEditType.REMOVE:
+                lambdas.append(lambda: (not self.graph.has_edge(src, dst)))
+            elif edit_type == EdgeEditType.FLIP:
+                lambdas.append(
+                    lambda: (
+                        self.graph.has_edge(dst, src)
+                        and not self.graph.has_edge(src, dst)
+                    )
+                )
+
+        return lambda: all([l() for l in lambdas])
 
     def _suggest_random_single_edge_change(
         self,

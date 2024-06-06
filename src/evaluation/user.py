@@ -285,13 +285,18 @@ class ECCSUser:
         """
         return self._fresh_edits_trajectory
 
-    def invoke_eccs(self, method: str = None, budget: int = None) -> tuple[bool, int]:
+    def invoke_eccs(
+        self, method: str = None, budget: int = None, max_judgments: int = None
+    ) -> tuple[bool, int]:
         """
         Invokes the ECCS system and updates the fixed and banned nodes accordingly.
 
         Parameters:
             method: The method to use for edge suggestions.
             budget: The budget for the invocation. Not all methods use this.
+            max_judgments: The maximum number of edits to produce a judgment for. If None,
+                the system will produce a judgment for all suggested edits provided by a single
+                invocation of the ECCS system.
 
         Returns:
             A tuple containing whether any edits were suggested and how many fresh edits were produced
@@ -303,7 +308,9 @@ class ECCSUser:
 
         # Get suggested modifications and selectively apply them
         start = datetime.now()
-        edits, ate, num_fresh_edits = self._eccs.suggest(method, budget)
+        edits, ate, num_fresh_edits = self._eccs.suggest(
+            method, budget, max_results=max_judgments
+        )
         end = datetime.now()
         self._invocation_duration_trajectory.append((end - start).total_seconds())
         self._fresh_edits_trajectory.append(num_fresh_edits)
@@ -375,7 +382,9 @@ class ECCSUser:
 
         for i in range(steps):
             print(f"Running iteration {i + 1}")
-            suggested_edits, num_fresh_edits = self.invoke_eccs(method, budget)
+            suggested_edits, num_fresh_edits = self.invoke_eccs(
+                method, budget, max_judgments=1
+            )
             if num_fresh_edits > 0:
                 self._eccs_algorithm_invocation_iters.append(i)
             if not suggested_edits:
