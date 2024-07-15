@@ -124,7 +124,21 @@ class MapAdjSetToGraph:
             A list of causal graph edits that correspond to the addition of v to the adjustment set.
         """
 
-        raise NotImplementedError("This function is not implemented yet.")
+        S = []
+        if v in nx.descendants(self.graph, self.treatment):
+            B, success = self._break_paths(self.treatment, v)
+            if not success:
+                return []
+            S.extend(B)
+        if v in nx.descendants(self.graph, self.outcome):
+            B, success = self._break_paths(self.outcome, v, S)
+            if not success:
+                return []
+            S.extend(B)
+
+        S.append(EdgeEdit(v, self.treatment, EdgeEditType.ADD))
+        S.append(EdgeEdit(v, self.outcome, EdgeEditType.ADD))
+        return S
 
     def _unoptimized_map_addition(
         self,
@@ -191,7 +205,20 @@ class MapAdjSetToGraph:
         Returns:
             A list of causal graph edits that correspond to the removal of v from the adjustment set.
         """
-        raise NotImplementedError("This function is not implemented yet.")
+        S = []
+        if v in nx.ancestors(self.graph, self.treatment):
+            S, success = self._break_paths(v, self._treatment)
+            if not success:
+                return []
+        
+        for w in self._yield_BFS_descendants(self.treatment):
+            if not (w, v) in self.ban_list:
+                if (v, w) in self.graph.edges:
+                    S.append(EdgeEdit(v, w, EdgeEditType.FLIP))
+                else:
+                    S.append(EdgeEdit(w, v, EdgeEditType.ADD))
+                return S
+        return []
 
     def _unoptimized_map_removal(
         self,
@@ -226,3 +253,33 @@ class MapAdjSetToGraph:
                     e.append(EdgeEdit(w, v, EdgeEditType.ADD))
                 return list(set(e))
         return []
+
+
+    def _break_paths(self, src: str, dst: str, preremovals: Optional[list[EdgeEdit]]) -> tuple[list[EdgeEdit], bool]:
+        """
+        Break all directed paths between two nodes in the graph, taking into account some edges that may have
+        already been removed.
+
+        Parameters:
+            src: The source node.
+            dst: The destination node.
+            preremovals: A list of edge edits indicating edge removals that have already been made.
+
+        Returns:
+            A list of causal graph edits that break all paths between the two nodes, and a boolean indicating success.
+        """
+
+        raise NotImplementedError
+    
+    def _yield_BFS_descendants(self, v: str) -> list[str]:
+        """
+        Yield the descendants of a variable, starting with the variable itself, in breadth-first search order.
+
+        Parameters:
+            v: The variable.
+
+        Returns:
+            A list of descendants in BFS order.
+        """
+        raise NotImplementedError
+        
