@@ -11,7 +11,7 @@ EDGE_GREEN = "#00FF25"
 EDGE_ORANGE = "#FFA500"
 
 EDGE_STYLES = {
-    EdgeState.FIXED: {"color": EDGE_BLUE, "style": "solid"},
+    EdgeState.FIXED: {"color": EDGE_GREEN, "style": "solid"},
     EdgeState.PRESENT: {"color": EDGE_BLUE, "style": "dashed"},
     EdgeState.SUGGESTED: {"color": EDGE_ORANGE, "style": "dashed"},
 }
