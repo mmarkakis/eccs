@@ -1,7 +1,7 @@
 import networkx as nx
 
 from .edges import EdgeEditType, EdgeEdit, Path, Edge
-from typing import Optional
+from typing import Optional, Iterator
 from collections import deque
 
 
@@ -34,6 +34,24 @@ class MapAdjSetToGraph:
         self.fix_list = fix_list
         self.ban_list = ban_list
         self.base_adj_set = base_adj_set
+
+    def update_fixlist(self, fix_list: list[Edge]) -> None:
+        """
+        Update the fix list.
+
+        Parameters:
+            fix_list: The new fix list.
+        """
+        self.fix_list = fix_list
+
+    def update_banlist(self, ban_list: list[Edge]) -> None:
+        """
+        Update the ban list.
+
+        Parameters:
+            ban_list: The new ban list.
+        """
+        self.ban_list = ban_list
 
     def _find_directed_paths(self, src: str, dst: str) -> list[Path]:
         """
@@ -186,11 +204,11 @@ class MapAdjSetToGraph:
         Returns:
             A list of causal graph edits that correspond to the removal of v from the adjustment set.
         """
-            
+
         if use_optimized:
             return self._optimized_map_removal(v)
         return self._unoptimized_map_removal(v)
-    
+
     def _optimized_map_removal(
         self,
         v: str,
@@ -210,7 +228,7 @@ class MapAdjSetToGraph:
             S, success = self._break_paths(v, self._treatment)
             if not success:
                 return []
-        
+
         for w in self._yield_BFS_descendants(self.treatment):
             if not (w, v) in self.ban_list:
                 if (v, w) in self.graph.edges:
@@ -254,24 +272,56 @@ class MapAdjSetToGraph:
                 return list(set(e))
         return []
 
-
-    def _break_paths(self, src: str, dst: str, preremovals: Optional[list[EdgeEdit]]) -> tuple[list[EdgeEdit], bool]:
+    def _break_paths(
+        self, source: str, sink: str, preremovals: Optional[list[EdgeEdit]] = None
+    ) -> tuple[list[EdgeEdit], bool]:
         """
-        Break all directed paths between two nodes in the graph, taking into account some edges that may have
-        already been removed.
+        Break all directed paths between two nodes in a directeed graph, after applying a list of causal graph edge removals.
 
         Parameters:
-            src: The source node.
-            dst: The destination node.
-            preremovals: A list of edge edits indicating edge removals that have already been made.
+            source: The source node.
+            sink: The sink node.
+            preremovals: A list of causal graph edge removals that should be applied before breaking the paths.
 
         Returns:
             A list of causal graph edits that break all paths between the two nodes, and a boolean indicating success.
         """
+        G_filtered = self.graph.copy()
 
-        raise NotImplementedError
-    
-    def _yield_BFS_descendants(self, v: str) -> list[str]:
+        if preremovals is not None:
+            for edit in preremovals:
+                assert edit.edit_type == EdgeEditType.REMOVE
+                G_filtered.remove_edge(edit.source, edit.target)
+
+        reachable_from_source = nx.descendants(G_filtered, source).union([source])
+        sink_reachable_from = nx.ancestors(G_filtered, sink).union([sink])
+        nodes_to_keep = reachable_from_source.intersection(sink_reachable_from)
+        if len(nodes_to_keep) == 0:
+            return [], True
+
+        nodes_to_drop = set(G_filtered.nodes) - nodes_to_keep
+        G_filtered.remove_nodes_from(nodes_to_drop)
+
+        B = []
+        queue = deque([source])
+        visited = set([source])
+
+        while queue:
+            V = queue.popleft()
+
+            if V == sink:
+                return [], False
+
+            for W in G_filtered.successors(V):
+                if (V, W) not in self.fix_list:
+                    B.append(EdgeEdit(V, W, EdgeEditType.REMOVE))
+                elif W not in visited:
+                    visited.add(W)
+                    queue.append(W)
+
+        return B, True
+
+    def _yield_BFS_descendants(self, v: str) -> Iterator[str]:
         """
         Yield the descendants of a variable, starting with the variable itself, in breadth-first search order.
 
@@ -281,5 +331,15 @@ class MapAdjSetToGraph:
         Returns:
             A list of descendants in BFS order.
         """
-        raise NotImplementedError
-        
+        queue = deque([v])
+        visited = set([v])
+
+        yield v
+
+        while queue:
+            node = queue.popleft()
+            for neighbor in self.graph.successors(node):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+                    yield neighbor
