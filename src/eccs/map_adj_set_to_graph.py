@@ -29,7 +29,6 @@ class MapAdjSetToGraph:
             base_adj_set: The starting adjustment set.
         """
         self.graph = graph
-        self.skeleton = graph.to_undirected()
         self.treatment = treatment
         self.outcome = outcome
         self.fix_list = fix_list
@@ -94,9 +93,46 @@ class MapAdjSetToGraph:
     def map_addition(
         self,
         v: str,
+        use_optimized: bool = True,
     ) -> list[EdgeEdit]:
         """
         Map an addition to the adjustment set to a list of causal graph edits.
+
+        Parameters:
+            v: The variable to add to the adjustment set.
+            use_optimized: Whether to use the optimized version of the function, developed after the ECCS paper.
+
+        Returns:
+            A list of causal graph edits that correspond to the addition of v to the adjustment set.
+        """
+        if use_optimized:
+            return self._optimized_map_addition(v)
+        return self._unoptimized_map_addition(v)
+
+    def _optimized_map_addition(
+        self,
+        v: str,
+    ) -> list[EdgeEdit]:
+        """
+        Map an addition to the adjustment set to a list of causal graph edits. This is the version of
+        this function developed after the ECCS paper.
+
+        Parameters:
+            v: The variable to add to the adjustment set.
+
+        Returns:
+            A list of causal graph edits that correspond to the addition of v to the adjustment set.
+        """
+
+        raise NotImplementedError("This function is not implemented yet.")
+
+    def _unoptimized_map_addition(
+        self,
+        v: str,
+    ) -> list[EdgeEdit]:
+        """
+        Map an addition to the adjustment set to a list of causal graph edits. This is the version of
+        this function presented in the ECCS paper.
 
         Parameters:
             v: The variable to add to the adjustment set.
@@ -124,9 +160,46 @@ class MapAdjSetToGraph:
     def map_removal(
         self,
         v: str,
+        use_optimized: bool = True,
     ) -> list[EdgeEdit]:
         """
         Map a removal from the adjustment set to a list of causal graph edits.
+
+        Parameters:
+            v: The variable to remove from the adjustment set.
+            use_optimized: Whether to use the optimized version of the function, developed after the ECCS paper.
+
+        Returns:
+            A list of causal graph edits that correspond to the removal of v from the adjustment set.
+        """
+            
+        if use_optimized:
+            return self._optimized_map_removal(v)
+        return self._unoptimized_map_removal(v)
+    
+    def _optimized_map_removal(
+        self,
+        v: str,
+    ) -> list[EdgeEdit]:
+        """
+        Map a removal from the adjustment set to a list of causal graph edits. This is the version of
+        this function developed after the ECCS paper.
+
+        Parameters:
+            v: The variable to remove from the adjustment set.
+
+        Returns:
+            A list of causal graph edits that correspond to the removal of v from the adjustment set.
+        """
+        raise NotImplementedError("This function is not implemented yet.")
+
+    def _unoptimized_map_removal(
+        self,
+        v: str,
+    ) -> list[EdgeEdit]:
+        """
+        Map a removal from the adjustment set to a list of causal graph edits. This is the version of
+        this function presented in the ECCS paper.
 
         Parameters:
             v: The variable to remove from the adjustment set.
