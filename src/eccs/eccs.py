@@ -637,6 +637,35 @@ class ECCS:
         # return ([edit], self._edit_and_get_ate([edit]), True) # TODO: FIXME
         return res
 
+    @staticmethod
+    def _find_adjustment_set(
+        graph: nx.DiGraph,
+        treatment: str,
+        outcome: str,
+    ) -> list[str]:
+        """
+        Find an adjustment set between the treatment and outcome variables in the graph.
+        We achieve this by only leaving backdoor paths in the graph, by temporarily removing
+        all edges that are directed out from the treatment variable.
+
+        Parameters:
+            graph: The graph to search.
+            treatment: The treatment variable.
+            outcome: The outcome variable.
+
+        Returns:
+            The adjustment set, or None if no adjustment set exists.
+        """
+        temp_removed_edges = list(graph.out_edges(treatment))
+        for edge in temp_removed_edges:
+            graph.remove_edge(edge[0], edge[1])
+        adjset = nx.algorithms.find_minimal_d_separator(
+            graph, treatment, outcome
+        )
+        for edge in temp_removed_edges:
+            graph.add_edge(edge[0], edge[1])
+        return adjset
+
     def _suggest_best_single_adjustment_set_change(
         self, max_results: int = None
     ) -> Tuple[list[EdgeEdit], float, int]:
@@ -682,7 +711,7 @@ class ECCS:
                 furthest_ate = ate
                 best_edits = edits
 
-        base_adj_set = nx.algorithms.minimal_d_separator(
+        base_adj_set = ECCS._find_adjustment_set(
             self._graph, self.treatment, self.outcome
         )
         print("Found base adjustment set: ", base_adj_set)

@@ -4,6 +4,7 @@ from typing import TypeAlias
 Edge: TypeAlias = tuple[str, str]
 Path: TypeAlias = list[Edge]
 
+
 class EdgeEditType:
     """
     Class to represent possible edit types to a directed edge.
@@ -23,6 +24,10 @@ class EdgeEdit:
         self.src = src
         self.dst = dst
         self.edit_type = edit_type
+
+    @property
+    def edge(self):
+        return (self.src, self.dst)
 
     def __str__(self):
         return f"{self.edit_type} edge from {self.src} to {self.dst}"
