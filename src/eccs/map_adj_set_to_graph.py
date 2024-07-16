@@ -202,7 +202,8 @@ class MapAdjSetToGraph:
             use_optimized: Whether to use the optimized version of the function, developed after the ECCS paper.
 
         Returns:
-            A list of causal graph edits that correspond to the removal of v from the adjustment set.
+            A list of causal graph edits that correspond to the removal of v from the adjustment set. If the
+            returned list is empty, the removal was unsuccessful.
         """
 
         if use_optimized:
@@ -221,22 +222,40 @@ class MapAdjSetToGraph:
             v: The variable to remove from the adjustment set.
 
         Returns:
-            A list of causal graph edits that correspond to the removal of v from the adjustment set.
+            A list of causal graph edits that correspond to the removal of v from the adjustment set. If 
+            the returned list is empty, the removal was unsuccessful.
         """
-        S = []
-        if v in nx.ancestors(self.graph, self.treatment):
-            S, success = self._break_paths(v, self._treatment)
-            if not success:
-                return []
 
-        for w in self._yield_BFS_descendants(self.treatment):
-            if not (w, v) in self.ban_list:
-                if (v, w) in self.graph.edges:
-                    S.append(EdgeEdit(v, w, EdgeEditType.FLIP))
-                else:
-                    S.append(EdgeEdit(w, v, EdgeEditType.ADD))
-                return S
-        return []
+        v_descendants = nx.descendants(self.graph, v)
+        t_bfs_descendants = self._BFS_descendants(self.treatment)
+        t_bfs_descendants_and_v_descendants = []
+
+        # First search among descendants that don't need path breaking.
+        for w in t_bfs_descendants:
+            if (w, v) in self.ban_list:
+                continue
+
+            if w in v_descendants:
+                t_bfs_descendants_and_v_descendants.append(w)
+                continue
+
+            return [EdgeEdit(w, v, EdgeEditType.ADD)]
+
+        # If unsuccessful, next search among descendants that need path breaking.
+        best_S = []
+        for w in t_bfs_descendants_and_v_descendants:
+            S, success = self._break_paths(v, w)
+            if not success:
+                continue
+            if not self._is_reachable_with_ignored_edges(
+                self.treatment, w, [e.edge for e in S]
+            ):
+                continue
+            S.append(EdgeEdit(w, v, EdgeEditType.ADD))
+            if len(S) < len(best_S) or len(best_S) == 0:
+                best_S = S
+
+        return best_S
 
     def _unoptimized_map_removal(
         self,
@@ -250,7 +269,8 @@ class MapAdjSetToGraph:
             v: The variable to remove from the adjustment set.
 
         Returns:
-            A list of causal graph edits that correspond to the removal of v from the adjustment set.
+            A list of causal graph edits that correspond to the removal of v from the adjustment set. If
+            the returned list is empty, the removal was unsuccessful.
         """
 
         e = []
@@ -272,6 +292,61 @@ class MapAdjSetToGraph:
                 return list(set(e))
         return []
 
+    def _all_reachable_with_ignored_edges(
+        self, source: str, ignore: set[Edge], reverse: bool = False
+    ) -> set[str]:
+        """
+        Perform a breadth-first search starting from a source node, ignoring certain edges,
+        and return a list of reachable nodes.
+
+        Parameters:
+            source: The source node.
+            ignore: The edges to ignore.
+            reverse: Whether to perform the search in the reverse directed graph.
+
+        Returns:
+            A set of reachable nodes.
+        """
+
+        queue = deque([source])
+        visited = set([source])
+
+        if reverse:
+            next_nodes = self.graph.predecessors
+            edge_is_ignored = lambda x, y: (y, x) in ignore
+        else:
+            next_nodes = self.graph.successors
+            edge_is_ignored = lambda x, y: (x, y) in ignore
+
+        while queue:
+            node = queue.popleft()
+            for neighbor in next_nodes(node):
+                if edge_is_ignored(node, neighbor):
+                    continue
+
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+
+        return visited
+
+    def _is_reachable_with_ignored_edges(
+        self, source: str, sink: str, ignore: set[Edge]
+    ) -> bool:
+        """
+        Check if a sink node is reachable from a source node, ignoring certain edges.
+
+        Parameters:
+            source: The source node.
+            sink: The sink node.
+            ignore: The edges to ignore.
+
+        Returns:
+            A boolean indicating whether the sink node is reachable from the source node.
+        """
+
+        return sink in self._all_reachable_with_ignored_edges(source, ignore)
+
     def _break_paths(
         self, source: str, sink: str, preremovals: Optional[list[EdgeEdit]] = None
     ) -> tuple[list[EdgeEdit], bool]:
@@ -286,21 +361,21 @@ class MapAdjSetToGraph:
         Returns:
             A list of causal graph edits that break all paths between the two nodes, and a boolean indicating success.
         """
-        G_filtered = self.graph.copy()
 
-        if preremovals is not None:
-            for edit in preremovals:
-                assert edit.edit_type == EdgeEditType.REMOVE
-                G_filtered.remove_edge(edit.source, edit.target)
+        edges_to_ignore = (
+            set([e.edge for e in preremovals]) if preremovals is not None else set()
+        )
 
-        reachable_from_source = nx.descendants(G_filtered, source).union([source])
-        sink_reachable_from = nx.ancestors(G_filtered, sink).union([sink])
+        reachable_from_source = self._all_reachable_with_ignored_edges(
+            source, edges_to_ignore
+        )
+        sink_reachable_from = self._all_reachable_with_ignored_edges(
+            sink, edges_to_ignore, reverse=True
+        )
+
         nodes_to_keep = reachable_from_source.intersection(sink_reachable_from)
         if len(nodes_to_keep) == 0:
             return [], True
-
-        nodes_to_drop = set(G_filtered.nodes) - nodes_to_keep
-        G_filtered.remove_nodes_from(nodes_to_drop)
 
         B = []
         queue = deque([source])
@@ -312,7 +387,9 @@ class MapAdjSetToGraph:
             if V == sink:
                 return [], False
 
-            for W in G_filtered.successors(V):
+            for W in self.graph.successors(V):
+                if W not in nodes_to_keep:
+                    continue
                 if (V, W) not in self.fix_list:
                     B.append(EdgeEdit(V, W, EdgeEditType.REMOVE))
                 elif W not in visited:
@@ -321,9 +398,9 @@ class MapAdjSetToGraph:
 
         return B, True
 
-    def _yield_BFS_descendants(self, v: str) -> Iterator[str]:
+    def _BFS_descendants(self, v: str) -> list[str]:
         """
-        Yield the descendants of a variable, starting with the variable itself, in breadth-first search order.
+        Return the descendants of a variable, starting with the variable itself, in breadth-first search order.
 
         Parameters:
             v: The variable.
@@ -332,14 +409,13 @@ class MapAdjSetToGraph:
             A list of descendants in BFS order.
         """
         queue = deque([v])
-        visited = set([v])
-
-        yield v
+        visited = [v]
 
         while queue:
             node = queue.popleft()
             for neighbor in self.graph.successors(node):
                 if neighbor not in visited:
-                    visited.add(neighbor)
+                    visited.append(neighbor)
                     queue.append(neighbor)
-                    yield neighbor
+
+        return visited
