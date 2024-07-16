@@ -10,3 +10,4 @@ dist/
 src/*egg*/
 tests/test_results/
 .vscode
+prof/
