@@ -148,14 +148,17 @@ class MapAdjSetToGraph:
             if not success:
                 return []
             S.extend(B)
-        if v in nx.descendants(self.graph, self.outcome):
-            B, success = self._break_paths(self.outcome, v, S)
+        ignore = [e.edge for e in S]
+        if self._is_reachable_with_ignored_edges(self.outcome, v, ignore):
+            B, success = self._break_paths(self.outcome, v, ignore)
             if not success:
                 return []
             S.extend(B)
 
-        S.append(EdgeEdit(v, self.treatment, EdgeEditType.ADD))
-        S.append(EdgeEdit(v, self.outcome, EdgeEditType.ADD))
+        if not self.graph.has_edge(v, self.treatment):
+            S.append(EdgeEdit(v, self.treatment, EdgeEditType.ADD))
+        if not self.graph.has_edge(v, self.outcome):
+            S.append(EdgeEdit(v, self.outcome, EdgeEditType.ADD))
         return S
 
     def _unoptimized_map_addition(
@@ -222,7 +225,7 @@ class MapAdjSetToGraph:
             v: The variable to remove from the adjustment set.
 
         Returns:
-            A list of causal graph edits that correspond to the removal of v from the adjustment set. If 
+            A list of causal graph edits that correspond to the removal of v from the adjustment set. If
             the returned list is empty, the removal was unsuccessful.
         """
 
@@ -293,7 +296,7 @@ class MapAdjSetToGraph:
         return []
 
     def _all_reachable_with_ignored_edges(
-        self, source: str, ignore: set[Edge], reverse: bool = False
+        self, source: str, ignore: Optional[set[Edge]] = None, reverse: bool = False
     ) -> set[str]:
         """
         Perform a breadth-first search starting from a source node, ignoring certain edges,
@@ -313,10 +316,14 @@ class MapAdjSetToGraph:
 
         if reverse:
             next_nodes = self.graph.predecessors
-            edge_is_ignored = lambda x, y: (y, x) in ignore
+            edge_is_ignored = (
+                (lambda x, y: (y, x) in ignore) if ignore else (lambda x, y: False)
+            )
         else:
             next_nodes = self.graph.successors
-            edge_is_ignored = lambda x, y: (x, y) in ignore
+            edge_is_ignored = (
+                (lambda x, y: (x, y) in ignore) if ignore else (lambda x, y: False)
+            )
 
         while queue:
             node = queue.popleft()
@@ -348,29 +355,23 @@ class MapAdjSetToGraph:
         return sink in self._all_reachable_with_ignored_edges(source, ignore)
 
     def _break_paths(
-        self, source: str, sink: str, preremovals: Optional[list[EdgeEdit]] = None
+        self, source: str, sink: str, ignore: Optional[set[Edge]] = None
     ) -> tuple[list[EdgeEdit], bool]:
         """
-        Break all directed paths between two nodes in a directeed graph, after applying a list of causal graph edge removals.
+        Break all directed paths between two nodes in a directed graph, ignoring any edges specified in `ignore`.
 
         Parameters:
             source: The source node.
             sink: The sink node.
-            preremovals: A list of causal graph edge removals that should be applied before breaking the paths.
+            ignore: The edges to ignore.
 
         Returns:
             A list of causal graph edits that break all paths between the two nodes, and a boolean indicating success.
         """
 
-        edges_to_ignore = (
-            set([e.edge for e in preremovals]) if preremovals is not None else set()
-        )
-
-        reachable_from_source = self._all_reachable_with_ignored_edges(
-            source, edges_to_ignore
-        )
+        reachable_from_source = self._all_reachable_with_ignored_edges(source, ignore)
         sink_reachable_from = self._all_reachable_with_ignored_edges(
-            sink, edges_to_ignore, reverse=True
+            sink, ignore, reverse=True
         )
 
         nodes_to_keep = reachable_from_source.intersection(sink_reachable_from)
