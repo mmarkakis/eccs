@@ -30,6 +30,7 @@ run_eccs:
     [
       "best_single_edge_change",
       "best_single_adjustment_set_change",
+      "best_single_adjustment_set_change_opt",
       "random_single_edge_change",
       "astar_single_edge_change",
     ]

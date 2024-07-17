@@ -20,6 +20,7 @@ class ECCS:
 
     EDGE_SUGGESTION_METHODS = [
         "best_single_edge_change",
+        "best_single_adjustment_set_change_opt",
         "best_single_adjustment_set_change",
         "astar_single_edge_change",
         "random_single_edge_change",
@@ -427,7 +428,11 @@ class ECCS:
             return self._suggest_best_single_edge_change()
         elif method == "best_single_adjustment_set_change":
             return self._suggest_best_single_adjustment_set_change(
-                max_results=max_results
+                max_results=max_results, use_optimized=False
+            )
+        elif method == "best_single_adjustment_set_change_opt":
+            return self._suggest_best_single_adjustment_set_change(
+                max_results=max_results, use_optimized=True
             )
         elif method == "random_single_edge_change":
             return self._suggest_random_single_edge_change()
@@ -659,15 +664,13 @@ class ECCS:
         temp_removed_edges = list(graph.out_edges(treatment))
         for edge in temp_removed_edges:
             graph.remove_edge(edge[0], edge[1])
-        adjset = nx.algorithms.find_minimal_d_separator(
-            graph, treatment, outcome
-        )
+        adjset = nx.algorithms.find_minimal_d_separator(graph, treatment, outcome)
         for edge in temp_removed_edges:
             graph.add_edge(edge[0], edge[1])
         return adjset
 
     def _suggest_best_single_adjustment_set_change(
-        self, max_results: int = None
+        self, max_results: int = None, use_optimized: bool = True
     ) -> Tuple[list[EdgeEdit], float, int]:
         """
         Suggest the best_single_adjustment_set_changes that maximally changes the ATE.
@@ -675,6 +678,7 @@ class ECCS:
         Parameters:
             max_results: The maximum number of edits to return. The rest, if any, are cached.
                 If None, all suggested edits are returned.
+            use_optimized: Whether to use the optimized version of the algorithm.
 
         Returns:
             A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
@@ -733,7 +737,7 @@ class ECCS:
         # Try adding each of the addable
         for v in vars_not_in_adj_set:
             print(f"Trying to add {v} to the adjustment set")
-            edits = mapper.map_addition(v)
+            edits = mapper.map_addition(v, use_optimized)
             print("Got back edits for addition: ", edits)
             ate = self._edit_and_get_ate(edits)
             maybe_update_best(ate, edits)
@@ -741,7 +745,7 @@ class ECCS:
         # Try removing each of the removable
         for v in base_adj_set:
             print(f"Trying to remove {v} from the adjustment set")
-            edits = mapper.map_removal(v)
+            edits = mapper.map_removal(v, use_optimized)
             print("Got back edit lists for removal: ", edits)
             ate = self._edit_and_get_ate(edits)
             maybe_update_best(ate, edits)
