@@ -403,6 +403,77 @@ def plot_zero_ate_diff(
     return max(elementwise_average)
 
 
+def plot_invocation_duration_scaling(
+    ax: Axes, method: str, base_path: str, prefix_to_data_point: dict[str, str]
+) -> float:
+    """
+    Plots the duration of each invocation for the given method.
+
+    Parameters:
+        ax: The axis to plot on.
+        method: The method to plot.
+        base_path: The base path to the results.
+        data_points_to_prefixes: A dictionary mapping each data point to the prefixes of the files to consider.
+
+    Returns:
+        The maximum plotted value.
+    """
+
+    data_points = set(prefix_to_data_point.values())
+
+    accumulators = {data_point: 0.0 for data_point in data_points}
+    invocation_counts = {data_point: 0 for data_point in data_points}
+
+    path = os.path.join(base_path, LINE_FORMATTING_DATA[method]["path"], "data")
+
+    if not os.path.exists(path):
+        return 0
+
+    for filename in os.listdir(path):
+        if filename.endswith("invocation_duration_trajectory.npy"):
+            # Load the list from the file
+            filepath = os.path.join(path, filename)
+            data = np.load(filepath)
+            data_point = prefix_to_data_point[filename[:12]]
+
+            # Load the freshness data to compute rounds
+            fresh_filepath = filepath.replace("invocation_duration", "fresh_edits")
+            fresh_data = np.load(fresh_filepath)
+
+            # Set latency to 0 for rounds where there were no fresh edits, and count the
+            # invocation otherwise.
+            for i, v in enumerate(fresh_data):
+                if v == 0:
+                    data[i] = 0
+                else:
+                    invocation_counts[data_point] += 1
+
+            # Accumulate the right data point
+            accumulators[data_point] += sum(data)
+
+    if all(x == 0 for x in invocation_counts):
+        return 0
+
+    elementwise_average = {
+        data_point: (
+            accumulators[data_point] / invocation_counts[data_point]
+            if invocation_counts[data_point] != 0
+            else 0
+        )
+        for data_point in data_points
+    }
+
+    ax.plot(
+        elementwise_average.keys(),
+        elementwise_average.values(),
+        label=LINE_FORMATTING_DATA[method]["label"],
+        marker=LINE_FORMATTING_DATA[method]["marker"],
+        color=LINE_FORMATTING_DATA[method]["color"],
+    )
+
+    return max(elementwise_average.values())
+
+
 def wrapup_plot(
     filename: str,
     ax: Axes,
@@ -435,8 +506,12 @@ def wrapup_plot(
 
     # Deal with the figure
     ax.tick_params(axis="both", which="major", labelsize=FONTSIZE)
-    ax.set_xlabel(f"{x_unit} " + r"\#", fontsize=FONTSIZE)
-    ax.set_xticks(np.arange(0, num_points, 2))
+    if x_unit == "Judgment" or x_unit == "Round":
+        x_unit = f"{x_unit} " + r"\#"
+        ax.set_xticks(np.arange(0, num_points, 2))
+    elif len(ax.get_lines()) > 0:
+        ax.set_xticks(ax.get_lines()[0].get_xdata())
+    ax.set_xlabel(x_unit, fontsize=FONTSIZE)
     ax.legend(fontsize=FONTSIZE)
     if log_y_axis:
         ax.set_yscale("log")
@@ -601,6 +676,58 @@ def plotter(path: str, skip: bool = False):
                 max_y,
                 x_unit="Round",
             )
+
+    ### Latency scaling by num_nodes
+    print("Plotting latency scaling by num_nodes...")
+    if skip and os.path.exists(os.path.join(plots_path, "scaling_num_nodes.png")):
+        print("Skipping latency scaling by num_nodes plot")
+    else:
+        _, ax = plt.subplots()
+        max_y = 0
+        prefix_to_data_point = {
+            prefix: num_nodes
+            for (num_nodes, _), prefixes in combination_to_ground_truth_dags.items()
+            for prefix in prefixes
+        }
+
+        for method in LINE_FORMATTING_DATA:
+            max_y = max(
+                max_y,
+                plot_invocation_duration_scaling(
+                    ax, method, path, prefix_to_data_point
+                ),
+            )
+        ax.set_ylabel("ECCS Latency (s)", fontsize=FONTSIZE)
+        wrapup_plot(
+            os.path.join(plots_path, "scaling_num_nodes"), ax, max_y, x_unit="Num Nodes"
+        )
+
+    ### Latency scaling by edge_prob
+    print("Plotting latency scaling by edge_prob...")
+    if skip and os.path.exists(os.path.join(plots_path, "scaling_edge_prob.png")):
+        print("Skipping latency scaling by edge_prob plot")
+    else:
+        _, ax = plt.subplots()
+        max_y = 0
+        prefix_to_data_point = {
+            prefix: edge_prob
+            for (_, edge_prob), prefixes in combination_to_ground_truth_dags.items()
+            for prefix in prefixes
+        }
+        for method in LINE_FORMATTING_DATA:
+            max_y = max(
+                max_y,
+                plot_invocation_duration_scaling(
+                    ax, method, path, prefix_to_data_point
+                ),
+            )
+        ax.set_ylabel("ECCS Latency (s)", fontsize=FONTSIZE)
+        wrapup_plot(
+            os.path.join(plots_path, "scaling_edge_prob"),
+            ax,
+            max_y,
+            x_unit="Edge Probability",
+        )
 
 
 if __name__ == "__main__":
