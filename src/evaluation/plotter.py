@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib as mpl
+from tqdm.auto import tqdm
 
 rc_fonts = {
     "font.family": "serif",
@@ -14,6 +15,7 @@ import matplotlib.pyplot as plt
 import yaml
 import os
 import argparse
+import json
 from matplotlib.axes import Axes
 
 
@@ -42,12 +44,21 @@ LINE_FORMATTING_DATA = {
         "marker": "o",
         "path": "best_single_adjustment_set_change",
     },
+    "best_single_adjustment_set_change_opt": {
+        "label": r"\textsc{AdjSetEdit} (Opt)",
+        "color": "#BA7FB7",
+        "marker": "o",
+        "path": "best_single_adjustment_set_change_opt",
+    },
 }
+
 
 FONTSIZE = 20
 
 
-def plot_edit_distance(ax: Axes, method: str, points: int, base_path: str) -> float:
+def plot_edit_distance(
+    ax: Axes, method: str, points: int, base_path: str, prefixes: list[str]
+) -> float:
     """
     Plots the edit distance for the given method.
 
@@ -56,6 +67,7 @@ def plot_edit_distance(ax: Axes, method: str, points: int, base_path: str) -> fl
         method: The method to plot.
         points: The number of points to plot.
         base_path: The base path to the results.
+        prefixes: The prefixes of the files to consider.
 
     Returns:
         The maximum plotted value.
@@ -70,7 +82,9 @@ def plot_edit_distance(ax: Axes, method: str, points: int, base_path: str) -> fl
         return 0
 
     for filename in os.listdir(path):
-        if filename.endswith("edit_distance_trajectory.npy"):
+        if filename.startswith(tuple(prefixes)) and filename.endswith(
+            "edit_distance_trajectory.npy"
+        ):
             # Load the list from the file
             filepath = os.path.join(path, filename)
             data = np.load(filepath)
@@ -101,7 +115,9 @@ def plot_edit_distance(ax: Axes, method: str, points: int, base_path: str) -> fl
     return max(elementwise_average)
 
 
-def plot_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> float:
+def plot_ate_diff(
+    ax: Axes, method: str, points: int, base_path: str, prefixes: list[str]
+) -> float:
     """
     Plots the Absolute Relative ATE Error for the given method.
 
@@ -110,6 +126,7 @@ def plot_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> float:
         method: The method to plot.
         points: The number of points to plot.
         base_path: The base path to the results.
+        prefixes: The prefixes of the files to consider.
 
     Returns:
         The maximum plotted value.
@@ -125,7 +142,9 @@ def plot_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> float:
         return 0
 
     for filename in os.listdir(path):
-        if filename.endswith("ate_diff_trajectory.npy"):
+        if filename.startswith(tuple(prefixes)) and filename.endswith(
+            "ate_diff_trajectory.npy"
+        ):
             # Load the list from the file
             filepath = os.path.join(path, filename)
             diff_data = np.load(filepath, allow_pickle=True)
@@ -178,7 +197,7 @@ def plot_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> float:
 
 
 def plot_invocation_duration(
-    ax: Axes, method: str, points: int, base_path: str
+    ax: Axes, method: str, points: int, base_path: str, prefixes: list[str]
 ) -> float:
     """
     Plots the duration of each invocation for the given method.
@@ -188,6 +207,7 @@ def plot_invocation_duration(
         method: The method to plot.
         points: The number of points to plot.
         base_path: The base path to the results.
+        prefixes: The prefixes of the files to consider.
 
     Returns:
         The maximum plotted value.
@@ -202,7 +222,9 @@ def plot_invocation_duration(
         return 0
 
     for filename in os.listdir(path):
-        if filename.endswith("invocation_duration_trajectory.npy"):
+        if filename.startswith(tuple(prefixes)) and filename.endswith(
+            "invocation_duration_trajectory.npy"
+        ):
             # Load the list from the file
             filepath = os.path.join(path, filename)
             data = np.load(filepath)
@@ -253,7 +275,7 @@ def plot_invocation_duration(
 
 
 def plot_fresh_edits(
-    ax: Axes, method: str, points: int, base_path: str
+    ax: Axes, method: str, points: int, base_path: str, prefixes: list[str]
 ) -> float:
     """
     Plots the number of fresh edits for each invocation for the given method.
@@ -263,6 +285,7 @@ def plot_fresh_edits(
         method: The method to plot.
         points: The number of points to plot.
         base_path: The base path to the results.
+        prefixes: The prefixes of the files to consider.
 
     Returns:
         The maximum plotted value.
@@ -277,7 +300,9 @@ def plot_fresh_edits(
         return 0
 
     for filename in os.listdir(path):
-        if filename.endswith("fresh_edits_trajectory.npy"):
+        if filename.startswith(tuple(prefixes)) and filename.endswith(
+            "fresh_edits_trajectory.npy"
+        ):
             # Load the list from the file
             filepath = os.path.join(path, filename)
             data = np.load(filepath)
@@ -286,7 +311,7 @@ def plot_fresh_edits(
             data = [x for x in data if x > 0]
 
             for i in range(len(data)):
-                file_counts[i + 1] += (1 if data[i] > 0 else 0)
+                file_counts[i + 1] += 1 if data[i] > 0 else 0
 
             if len(data) < points:
                 orig_len = len(data)
@@ -306,7 +331,7 @@ def plot_fresh_edits(
         i / j if j != 0 else 0 for i, j in zip(accumulator, file_counts)
     ]
 
-    if method == 'best_single_adjustment_set_change':
+    if method == "best_single_adjustment_set_change":
         print(file_counts)
 
     retval = max(elementwise_average)
@@ -325,7 +350,9 @@ def plot_fresh_edits(
     return retval
 
 
-def plot_zero_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> float:
+def plot_zero_ate_diff(
+    ax: Axes, method: str, points: int, base_path: str, prefixes: list[str]
+) -> float:
     """
     Plots the fraction of experiments with zero ATE difference at each round.
 
@@ -334,6 +361,7 @@ def plot_zero_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> fl
         method: The method to plot.
         points: The number of points to plot.
         base_path: The base path to the results.
+        prefixes: The prefixes of the files to consider.
     """
 
     accumulator = [0] * points
@@ -345,7 +373,9 @@ def plot_zero_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> fl
         return 0
 
     for filename in os.listdir(path):
-        if filename.endswith("ate_diff_trajectory.npy"):
+        if filename.startswith(tuple(prefixes)) and filename.endswith(
+            "ate_diff_trajectory.npy"
+        ):
             # Load the list from the file
             filepath = os.path.join(path, filename)
             diff_data = np.load(filepath, allow_pickle=True)
@@ -374,7 +404,11 @@ def plot_zero_ate_diff(ax: Axes, method: str, points: int, base_path: str) -> fl
 
 
 def wrapup_plot(
-    filename: str, ax: Axes, max_val: float, log_y_axis: bool = False, x_unit: str = "Judgment"
+    filename: str,
+    ax: Axes,
+    max_val: float,
+    log_y_axis: bool = False,
+    x_unit: str = "Judgment",
 ) -> None:
     """
     Set final formatting for the plot and save it to a file. Also print stats about the plotted
@@ -409,7 +443,9 @@ def wrapup_plot(
         ax.set_ylim(0.001, 10 ** (1.1 * np.log10(max_val)))
     else:
         ax.set_ylim(0, 1.1 * max_val)
-    if False: # These are the hard-coded y limits for /home/markakis/eccs/evaluation/2024-04-05 12:10:57.816692
+    if (
+        False
+    ):  # These are the hard-coded y limits for /home/markakis/eccs/evaluation/2024-04-05 12:10:57.816692
         if "edit_distance" in filename:
             ax.set_ylim(0, 24.432597305389223)
         elif "ate_error" in filename:
@@ -420,7 +456,6 @@ def wrapup_plot(
             ax.set_ylim(0, 4.776765147721583)
         elif "zero_ate_diff" in filename:
             ax.set_ylim(0, 0.8694610778443115)
-
 
     plt.tight_layout()
     plt.savefig(filename + ".png", dpi=300)
@@ -445,79 +480,127 @@ def plotter(path: str, skip: bool = False):
     plots_path = os.path.join(path, "plots")
     os.makedirs(plots_path, exist_ok=True)
 
-    ### Graph edit distance
-    print("Plotting graph edit distance...")
-    if skip and os.path.exists(os.path.join(plots_path, "edit_distance.png")):
-        print("Skipping edit distance plot")
-    else:
-        _, ax = plt.subplots()
-        max_y = 0
-        for method in LINE_FORMATTING_DATA:
-            max_y = max(
+    # Figure out the ground truth dags for each parameter combination
+    if type(config["gen_dag"]["num_nodes"]) != list:
+        config["gen_dag"]["num_nodes"] = [config["gen_dag"]["num_nodes"]]
+    if type(config["gen_dag"]["edge_prob"]) != list:
+        config["gen_dag"]["edge_prob"] = [config["gen_dag"]["edge_prob"]]
+    combinations = [
+        (num_nodes, edge_prob)
+        for num_nodes in config["gen_dag"]["num_nodes"]
+        for edge_prob in config["gen_dag"]["edge_prob"]
+    ]
+    combination_to_ground_truth_dags = {}
+    for file in os.listdir(os.path.join(path, "ground_truth_dags")):
+        if file.endswith(".json"):
+            name = file[:12]
+            with open(os.path.join(path, "ground_truth_dags", file), "r") as f:
+                params = json.load(f)
+            combination_to_ground_truth_dags.setdefault(
+                (params["num_nodes"], params["edge_prob"]), []
+            ).append(name)
+
+    for num_nodes, edge_prob in combinations:
+        print(f"Plotting for num_nodes={num_nodes}, edge_prob={edge_prob}...")
+        prefixes = combination_to_ground_truth_dags[(num_nodes, edge_prob)]
+
+        # Create a directory for the plots
+        comb_plots_path = os.path.join(
+            plots_path, f"num_nodes={num_nodes}_edge_prob={edge_prob}"
+        )
+        os.makedirs(comb_plots_path, exist_ok=True)
+
+        ### Graph edit distance
+        print("Plotting graph edit distance...")
+        if skip and os.path.exists(os.path.join(comb_plots_path, "edit_distance.png")):
+            print("Skipping edit distance plot")
+        else:
+            _, ax = plt.subplots()
+            max_y = 0
+            for method in LINE_FORMATTING_DATA:
+                max_y = max(
+                    max_y,
+                    plot_edit_distance(ax, method, num_points, path, prefixes),
+                )
+            ax.set_ylabel("Graph Edit Distance", fontsize=FONTSIZE)
+            wrapup_plot(os.path.join(comb_plots_path, "edit_distance"), ax, max_y)
+
+        ### ATE difference
+        print("Plotting ATE difference...")
+        if skip and os.path.exists(os.path.join(comb_plots_path, "ate_error.png")):
+            print("Skipping ATE Error plot")
+        else:
+            _, ax = plt.subplots()
+            max_y = 0
+            for method in LINE_FORMATTING_DATA:
+                max_y = max(
+                    max_y, plot_ate_diff(ax, method, num_points, path, prefixes)
+                )
+            ax.set_ylabel("ARE_ATE", fontsize=FONTSIZE)
+            wrapup_plot(os.path.join(comb_plots_path, "ate_error"), ax, max_y)
+
+        ### Invocation Duration
+        print("Plotting Invocation Duration...")
+        if skip and os.path.exists(
+            os.path.join(comb_plots_path, "invocation_duration.png")
+        ):
+            print("Skipping Invocation Duration plot")
+        else:
+            _, ax = plt.subplots()
+            max_y = 0
+            for method in LINE_FORMATTING_DATA:
+                max_y = max(
+                    max_y,
+                    plot_invocation_duration(ax, method, num_points, path, prefixes),
+                )
+
+            ax.set_ylabel("ECCS Latency (s)", fontsize=FONTSIZE)
+            wrapup_plot(
+                os.path.join(comb_plots_path, "invocation_duration"),
+                ax,
                 max_y,
-                plot_edit_distance(ax, method, num_points, path),
+                log_y_axis=True,
+                x_unit="Round",
             )
-        ax.set_ylabel("Graph Edit Distance", fontsize=FONTSIZE)
-        wrapup_plot(os.path.join(plots_path, "edit_distance"), ax, max_y)
 
-    ### ATE difference
-    print("Plotting ATE difference...")
-    if skip and os.path.exists(os.path.join(plots_path, "ate_error.png")):
-        print("Skipping ATE Error plot")
-    else:
-        _, ax = plt.subplots()
-        max_y = 0
-        for method in LINE_FORMATTING_DATA:
-            max_y = max(max_y, plot_ate_diff(ax, method, num_points, path))
-        ax.set_ylabel("ARE_ATE", fontsize=FONTSIZE)
-        wrapup_plot(os.path.join(plots_path, "ate_error"), ax, max_y)
+        ### Number of fresh edits
+        print("Plotting Fresh Edits...")
+        if skip and os.path.exists(os.path.join(comb_plots_path, "fresh_edits.png")):
+            print("Skipping Fresh Edits plot")
+        else:
+            _, ax = plt.subplots()
+            max_y = 0
+            for method in LINE_FORMATTING_DATA:
+                max_y = max(
+                    max_y, plot_fresh_edits(ax, method, num_points, path, prefixes)
+                )
 
-    ### Invocation Duration
-    print("Plotting Invocation Duration...")
-    if skip and os.path.exists(os.path.join(plots_path, "invocation_duration.png")):
-        print("Skipping Invocation Duration plot")
-    else:
-        _, ax = plt.subplots()
-        max_y = 0
-        for method in LINE_FORMATTING_DATA:
-            max_y = max(max_y, plot_invocation_duration(ax, method, num_points, path))
+            ax.set_ylabel(r"\# Fresh Edits", fontsize=FONTSIZE)
+            wrapup_plot(
+                os.path.join(comb_plots_path, "fresh_edits"), ax, max_y, x_unit="Round"
+            )
 
-        ax.set_ylabel("ECCS Latency (s)", fontsize=FONTSIZE)
-        wrapup_plot(
-            os.path.join(plots_path, "invocation_duration"),
-            ax,
-            max_y,
-            log_y_axis=True,
-            x_unit="Round",
-        )
+        ### Fraction of experiments with zero ATE difference at that round
+        print("Plotting Fraction of experiments with zero ATE difference...")
+        if skip and os.path.exists(os.path.join(comb_plots_path, "zero_ate_diff.png")):
+            print("Skipping Zero ATE Difference plot")
+        else:
+            _, ax = plt.subplots()
+            max_y = 0
+            for method in LINE_FORMATTING_DATA:
+                max_y = max(
+                    max_y, plot_zero_ate_diff(ax, method, num_points, path, prefixes)
+                )
 
-    ### Number of fresh edits
-    print("Plotting Fresh Edits...")
-    if skip and os.path.exists(os.path.join(plots_path, "fresh_edits.png")):
-        print("Skipping Fresh Edits plot")
-    else:
-        _, ax = plt.subplots()
-        max_y = 0
-        for method in LINE_FORMATTING_DATA:
-            max_y = max(max_y, plot_fresh_edits(ax, method, num_points, path))
-
-        ax.set_ylabel(r"\# Fresh Edits", fontsize=FONTSIZE)
-        wrapup_plot(
-            os.path.join(plots_path, "fresh_edits"), ax, max_y, x_unit="Round"
-        )
-
-    ### Fraction of experiments with zero ATE difference at that round
-    print("Plotting Fraction of experiments with zero ATE difference...")
-    if skip and os.path.exists(os.path.join(plots_path, "zero_ate_diff.png")):
-        print("Skipping Zero ATE Difference plot")
-    else:
-        _, ax = plt.subplots()
-        max_y = 0
-        for method in LINE_FORMATTING_DATA:
-            max_y = max(max_y, plot_zero_ate_diff(ax, method, num_points, path))
-
-        ax.set_ylabel("Fraction of Experiments with\nZero ARE_ATE", fontsize=FONTSIZE)
-        wrapup_plot(os.path.join(plots_path, "zero_ate_diff"), ax, max_y, x_unit="Round")
+            ax.set_ylabel(
+                "Fraction of Experiments with\nZero ARE_ATE", fontsize=FONTSIZE
+            )
+            wrapup_plot(
+                os.path.join(comb_plots_path, "zero_ate_diff"),
+                ax,
+                max_y,
+                x_unit="Round",
+            )
 
 
 if __name__ == "__main__":

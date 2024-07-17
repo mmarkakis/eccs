@@ -16,6 +16,7 @@ from tqdm.auto import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import traceback
 import signal
+import json
 from functools import partial
 from src.evaluation.plotter import plotter
 
@@ -73,7 +74,7 @@ def simulate(
         dataset_name,
         num_steps,
         i,
-        astar_budget
+        astar_budget,
     ) = args
 
     f = open(
@@ -136,7 +137,8 @@ def simulate(
     f.flush()
 
     exp_prefix = os.path.join(
-        results_path, "data",
+        results_path,
+        "data",
         f"{dataset_name}_{starting_dag['name']}_{treatment}_{outcome}_{method}_{'' if i == None else f'{i}_'}",
     )
 
@@ -205,22 +207,36 @@ async def main():
     ground_truth_dags = {}
     if phases_to_skip < 1:
         print(f"{datetime.now()} Phase 1: Generating ground truth dags")
-        for _ in tqdm(range(config["gen_dag"]["ground_truth_dags"])):
-            ret_dict = RandomDAGGenerator.generate(
-                config["gen_dag"]["num_nodes"],
-                config["gen_dag"]["edge_prob"],
-                tuple(config["gen_dag"]["edge_weight_range"]),
-                tuple(config["gen_dag"]["edge_noise_sd_range"]),
-                ground_truth_dags_path,
-            )
-            ground_truth_dags[ret_dict["name"]] = ret_dict
+        for num_nodes in config["gen_dag"]["num_nodes"]:
+            for edge_prob in config["gen_dag"]["edge_prob"]:
+                for _ in tqdm(range(config["gen_dag"]["ground_truth_dags"])):
+                    ret_dict = RandomDAGGenerator.generate(
+                        num_nodes,
+                        edge_prob,
+                        tuple(config["gen_dag"]["edge_weight_range"]),
+                        tuple(config["gen_dag"]["edge_noise_sd_range"]),
+                        ground_truth_dags_path,
+                    )
+                    ret_dict["num_nodes"] = num_nodes
+                    ret_dict["edge_prob"] = edge_prob
+                    ground_truth_dags[ret_dict["name"]] = ret_dict
     else:
         print(f"{datetime.now()} Phase 1: Loading ground truth dags")
         for file in tqdm(os.listdir(ground_truth_dags_path)):
             if file.endswith(".dot"):
                 name = file[:12]
+                with open(
+                    os.path.join(
+                        ground_truth_dags_path,
+                        file.replace("graph.dot", "parameters.json"),
+                    ),
+                    "r",
+                ) as f:
+                    params = json.load(f)
                 ground_truth_dags[name] = {
                     "name": name,
+                    "num_nodes": params["num_nodes"],
+                    "edge_prob": params["edge_prob"],
                     "graph": nx.DiGraph(
                         nx.nx_pydot.read_dot(os.path.join(ground_truth_dags_path, file))
                     ),
@@ -268,22 +284,35 @@ async def main():
 
     if phases_to_skip < 3:
         print(f"{datetime.now()} Phase 3: Generating starting dags")
-        for _ in tqdm(range(config["gen_starting_dag"]["starting_dags"])):
-            ret_val = RandomDAGGenerator.generate(
-                config["gen_starting_dag"]["num_nodes"],
-                config["gen_starting_dag"]["edge_prob"],
-                tuple(config["gen_starting_dag"]["edge_weight_range"]),
-                tuple(config["gen_starting_dag"]["edge_noise_sd_range"]),
-                starting_dags_path,
-            )
-            starting_dags[ret_val["name"]] = ret_val
+        for num_nodes in config["gen_dag"]["num_nodes"]:
+            for edge_prob in config["gen_dag"]["edge_prob"]:
+                for _ in tqdm(range(config["gen_starting_dag"]["starting_dags"])):
+                    ret_val = RandomDAGGenerator.generate(
+                        num_nodes,
+                        edge_prob,
+                        tuple(config["gen_starting_dag"]["edge_weight_range"]),
+                        tuple(config["gen_starting_dag"]["edge_noise_sd_range"]),
+                        starting_dags_path,
+                    )
+                    ret_val["num_nodes"] = num_nodes
+                    ret_val["edge_prob"] = edge_prob
+                    starting_dags[ret_val["name"]] = ret_val
     else:
         print(f"{datetime.now()} Phase 3: Loading starting dags")
         for file in tqdm(os.listdir(starting_dags_path)):
             if file.endswith(".dot"):
                 name = file[:12]
+                with open(
+                    os.path.join(
+                        starting_dags_path, file.replace("graph.dot", "parameters.json")
+                    ),
+                    "r",
+                ) as f:
+                    params = json.load(f)
                 starting_dags[name] = {
                     "name": name,
+                    "num_nodes": params["num_nodes"],
+                    "edge_prob": params["edge_prob"],
                     "graph": nx.DiGraph(
                         nx.nx_pydot.read_dot(os.path.join(starting_dags_path, file))
                     ),
@@ -300,7 +329,7 @@ async def main():
     num_steps = config["run_eccs"]["num_steps"]
     methods = config["run_eccs"]["methods"]
     num_random_tries = config["run_eccs"]["num_tries_for_random_method"]
-    num_tasks = len(methods) + (
+    runs_per_exp_instance = len(methods) + (
         (num_random_tries - 1) if "random_single_edge_change" in methods else 0
     )
 
@@ -310,30 +339,41 @@ async def main():
             os.makedirs(os.path.join(work_path, method), exist_ok=True)
             os.makedirs(os.path.join(work_path, method, "logs"), exist_ok=True)
             os.makedirs(os.path.join(work_path, method, "data"), exist_ok=True)
-        
+
         tasks = []
-        pbar = tqdm(
-            total=config["gen_dag"]["ground_truth_dags"]
+        runs_per_size_class = lambda num_nodes: (
+            config["gen_dag"]["ground_truth_dags"]
             * config["gen_dataset"]["datasets_per_ground_truth_dag"]
             * config["gen_starting_dag"]["starting_dags"]
-            * int(
-                config["gen_dag"]["num_nodes"] * (config["gen_dag"]["num_nodes"] - 1) / 2
-            )  # Choices of treatment / outcome
-            * num_tasks
+            * len(config["gen_dag"]["edge_prob"])
+            * int(num_nodes * (num_nodes - 1) / 2)  # Choices of treatment / outcome
+            * runs_per_exp_instance
         )
+        total_runs = sum(
+            [
+                runs_per_size_class(num_nodes)
+                for num_nodes in config["gen_dag"]["num_nodes"]
+            ]
+        )
+        pbar = tqdm(total=total_runs)
         # For each ground truth dag...
         for ground_truth_dag_name, datasets in dataset_names.items():
             ground_truth_dag = ground_truth_dags[ground_truth_dag_name]
             # For each dataset...
             for dataset_name in datasets:
                 data = pd.read_csv(os.path.join(datasets_path, f"{dataset_name}.csv"))
-                # For each starting dag...
+                # For each starting dag with the same settings as the ground truth dag...
                 for starting_dag in starting_dags.values():
+                    if (starting_dag["num_nodes"] != ground_truth_dag["num_nodes"]) or (
+                        starting_dag["edge_prob"] != ground_truth_dag["edge_prob"]
+                    ):
+                        continue
+
                     # For each choice of treatment...
-                    for treatment_idx in range(config["gen_dag"]["num_nodes"]):
+                    for treatment_idx in range(ground_truth_dag["num_nodes"]):
                         # For each choice of outcome...
                         for outcome_idx in range(
-                            treatment_idx + 1, config["gen_dag"]["num_nodes"]
+                            treatment_idx + 1, ground_truth_dag["num_nodes"]
                         ):
 
                             treatment = f"v{treatment_idx}"
@@ -341,8 +381,10 @@ async def main():
 
                             if not nx.has_path(
                                 ground_truth_dag["graph"], treatment, outcome
-                            ) or not nx.has_path(starting_dag["graph"], treatment, outcome):
-                                pbar.update(num_tasks)
+                            ) or not nx.has_path(
+                                starting_dag["graph"], treatment, outcome
+                            ):
+                                pbar.update(runs_per_exp_instance)
                                 continue
 
                             # Run ECCS
@@ -361,7 +403,7 @@ async def main():
                                                 dataset_name,
                                                 num_steps,
                                                 i,
-                                                config['run_eccs']['astar_budget']
+                                                config["run_eccs"]["astar_budget"],
                                             )
                                         )
                                 else:
@@ -377,7 +419,7 @@ async def main():
                                             dataset_name,
                                             num_steps,
                                             None,
-                                            config['run_eccs']['astar_budget']
+                                            config["run_eccs"]["astar_budget"],
                                         )
                                     )
 
