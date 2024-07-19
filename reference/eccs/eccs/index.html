@@ -2919,9 +2919,9 @@
 </span><span id="__span-0-604"><a id="__codelineno-0-604" name="__codelineno-0-604"></a>        <span class="k">return</span> <span class="p">(</span><span class="n">best_edits</span><span class="p">,</span> <span class="n">furthest_ate</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 </span><span id="__span-0-605"><a id="__codelineno-0-605" name="__codelineno-0-605"></a>
 </span><span id="__span-0-606"><a id="__codelineno-0-606" name="__codelineno-0-606"></a>    <span class="nd">@staticmethod</span>
-</span><span id="__span-0-607"><a id="__codelineno-0-607" name="__codelineno-0-607"></a>    <span class="k">def</span> <span class="nf">_pop_n</span><span class="p">(</span><span class="n">l</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+</span><span id="__span-0-607"><a id="__codelineno-0-607" name="__codelineno-0-607"></a>    <span class="k">def</span> <span class="nf">_pop_n</span><span class="p">(</span><span class="n">l</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 </span><span id="__span-0-608"><a id="__codelineno-0-608" name="__codelineno-0-608"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="__span-0-609"><a id="__codelineno-0-609" name="__codelineno-0-609"></a><span class="sd">        Pop `n` elements from the start of list `l` and return them.</span>
+</span><span id="__span-0-609"><a id="__codelineno-0-609" name="__codelineno-0-609"></a><span class="sd">        Pop `n` elements from the start of list `l` and return them as a list.</span>
 </span><span id="__span-0-610"><a id="__codelineno-0-610" name="__codelineno-0-610"></a>
 </span><span id="__span-0-611"><a id="__codelineno-0-611" name="__codelineno-0-611"></a><span class="sd">        Parameters:</span>
 </span><span id="__span-0-612"><a id="__codelineno-0-612" name="__codelineno-0-612"></a><span class="sd">            l: The list to pop from.</span>
@@ -3108,11 +3108,11 @@
 </span><span id="__span-0-793"><a id="__codelineno-0-793" name="__codelineno-0-793"></a><span class="sd">        recent edits to have been applied to self._graph.</span>
 </span><span id="__span-0-794"><a id="__codelineno-0-794" name="__codelineno-0-794"></a>
 </span><span id="__span-0-795"><a id="__codelineno-0-795" name="__codelineno-0-795"></a><span class="sd">        Parameters:</span>
-</span><span id="__span-0-796"><a id="__codelineno-0-796" name="__codelineno-0-796"></a><span class="sd">            edit: The edit to evaluate.</span>
+</span><span id="__span-0-796"><a id="__codelineno-0-796" name="__codelineno-0-796"></a><span class="sd">            edits: The edits to evaluate.</span>
 </span><span id="__span-0-797"><a id="__codelineno-0-797" name="__codelineno-0-797"></a>
 </span><span id="__span-0-798"><a id="__codelineno-0-798" name="__codelineno-0-798"></a><span class="sd">        Returns:</span>
-</span><span id="__span-0-799"><a id="__codelineno-0-799" name="__codelineno-0-799"></a><span class="sd">            A lambda that will evaluate true if the edit could be the most</span>
-</span><span id="__span-0-800"><a id="__codelineno-0-800" name="__codelineno-0-800"></a><span class="sd">            recent edit to have been applied to self._graph.</span>
+</span><span id="__span-0-799"><a id="__codelineno-0-799" name="__codelineno-0-799"></a><span class="sd">            A lambda that will evaluate true if the edits could be the most</span>
+</span><span id="__span-0-800"><a id="__codelineno-0-800" name="__codelineno-0-800"></a><span class="sd">            recent edits to have been applied to self._graph.</span>
 </span><span id="__span-0-801"><a id="__codelineno-0-801" name="__codelineno-0-801"></a><span class="sd">        &quot;&quot;&quot;</span>
 </span><span id="__span-0-802"><a id="__codelineno-0-802" name="__codelineno-0-802"></a>        <span class="n">lambdas</span> <span class="o">=</span> <span class="p">[]</span>
 </span><span id="__span-0-803"><a id="__codelineno-0-803" name="__codelineno-0-803"></a>        <span class="k">for</span> <span class="n">src</span><span class="p">,</span> <span class="n">dst</span><span class="p">,</span> <span class="n">edit_type</span> <span class="ow">in</span> <span class="n">edits</span><span class="p">:</span>
@@ -5986,7 +5986,7 @@ Parameters:
 
     <div class="doc doc-contents ">
 
-      <p>Pop <code>n</code> elements from the start of list <code>l</code> and return them.</p>
+      <p>Pop <code>n</code> elements from the start of list <code>l</code> and return them as a list.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -6003,7 +6003,7 @@ Parameters:
           <tr class="doc-section-item">
             <td><code>l</code></td>
             <td>
-                  <code>list</code>
+                  <code>list[<span title="typing.Any">Any</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6043,6 +6043,7 @@ Parameters:
       <tbody>
           <tr class="doc-section-item">
             <td>
+                  <code>list[<span title="typing.Any">Any</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -6070,9 +6071,9 @@ Parameters:
 <span class="normal"><a href="#__codelineno-0-618">618</a></span>
 <span class="normal"><a href="#__codelineno-0-619">619</a></span>
 <span class="normal"><a href="#__codelineno-0-620">620</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-606"><a id="__codelineno-0-606" name="__codelineno-0-606"></a><span class="nd">@staticmethod</span>
-</span><span id="__span-0-607"><a id="__codelineno-0-607" name="__codelineno-0-607"></a><span class="k">def</span> <span class="nf">_pop_n</span><span class="p">(</span><span class="n">l</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+</span><span id="__span-0-607"><a id="__codelineno-0-607" name="__codelineno-0-607"></a><span class="k">def</span> <span class="nf">_pop_n</span><span class="p">(</span><span class="n">l</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 </span><span id="__span-0-608"><a id="__codelineno-0-608" name="__codelineno-0-608"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="__span-0-609"><a id="__codelineno-0-609" name="__codelineno-0-609"></a><span class="sd">    Pop `n` elements from the start of list `l` and return them.</span>
+</span><span id="__span-0-609"><a id="__codelineno-0-609" name="__codelineno-0-609"></a><span class="sd">    Pop `n` elements from the start of list `l` and return them as a list.</span>
 </span><span id="__span-0-610"><a id="__codelineno-0-610" name="__codelineno-0-610"></a>
 </span><span id="__span-0-611"><a id="__codelineno-0-611" name="__codelineno-0-611"></a><span class="sd">    Parameters:</span>
 </span><span id="__span-0-612"><a id="__codelineno-0-612" name="__codelineno-0-612"></a><span class="sd">        l: The list to pop from.</span>
@@ -6743,12 +6744,13 @@ recent edits to have been applied to self._graph.</p>
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code>edit</code></td>
+            <td><code>edits</code></td>
             <td>
+                  <code>list[<a class="autorefs autorefs-internal" title="eccs.edges.EdgeEdit" href="../edges/#eccs.edges.EdgeEdit">EdgeEdit</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The edit to evaluate.</p>
+                <p>The edits to evaluate.</p>
               </div>
             </td>
             <td>
@@ -6774,7 +6776,7 @@ recent edits to have been applied to self._graph.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A lambda that will evaluate true if the edit could be the most</p>
+                <p>A lambda that will evaluate true if the edits could be the most</p>
               </div>
             </td>
           </tr>
@@ -6784,7 +6786,7 @@ recent edits to have been applied to self._graph.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>recent edit to have been applied to self._graph.</p>
+                <p>recent edits to have been applied to self._graph.</p>
               </div>
             </td>
           </tr>
@@ -6829,11 +6831,11 @@ recent edits to have been applied to self._graph.</p>
 </span><span id="__span-0-793"><a id="__codelineno-0-793" name="__codelineno-0-793"></a><span class="sd">    recent edits to have been applied to self._graph.</span>
 </span><span id="__span-0-794"><a id="__codelineno-0-794" name="__codelineno-0-794"></a>
 </span><span id="__span-0-795"><a id="__codelineno-0-795" name="__codelineno-0-795"></a><span class="sd">    Parameters:</span>
-</span><span id="__span-0-796"><a id="__codelineno-0-796" name="__codelineno-0-796"></a><span class="sd">        edit: The edit to evaluate.</span>
+</span><span id="__span-0-796"><a id="__codelineno-0-796" name="__codelineno-0-796"></a><span class="sd">        edits: The edits to evaluate.</span>
 </span><span id="__span-0-797"><a id="__codelineno-0-797" name="__codelineno-0-797"></a>
 </span><span id="__span-0-798"><a id="__codelineno-0-798" name="__codelineno-0-798"></a><span class="sd">    Returns:</span>
-</span><span id="__span-0-799"><a id="__codelineno-0-799" name="__codelineno-0-799"></a><span class="sd">        A lambda that will evaluate true if the edit could be the most</span>
-</span><span id="__span-0-800"><a id="__codelineno-0-800" name="__codelineno-0-800"></a><span class="sd">        recent edit to have been applied to self._graph.</span>
+</span><span id="__span-0-799"><a id="__codelineno-0-799" name="__codelineno-0-799"></a><span class="sd">        A lambda that will evaluate true if the edits could be the most</span>
+</span><span id="__span-0-800"><a id="__codelineno-0-800" name="__codelineno-0-800"></a><span class="sd">        recent edits to have been applied to self._graph.</span>
 </span><span id="__span-0-801"><a id="__codelineno-0-801" name="__codelineno-0-801"></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="__span-0-802"><a id="__codelineno-0-802" name="__codelineno-0-802"></a>    <span class="n">lambdas</span> <span class="o">=</span> <span class="p">[]</span>
 </span><span id="__span-0-803"><a id="__codelineno-0-803" name="__codelineno-0-803"></a>    <span class="k">for</span> <span class="n">src</span><span class="p">,</span> <span class="n">dst</span><span class="p">,</span> <span class="n">edit_type</span> <span class="ow">in</span> <span class="n">edits</span><span class="p">:</span>
