@@ -538,7 +538,7 @@ class ECCS:
 
         Returns:
             A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
-            if the underlying algorithm was invoked anew, the total number of edits it produced.
+                if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
         base_ate = self.get_ate()
         furthest_ate = base_ate
@@ -632,7 +632,7 @@ class ECCS:
 
         Returns:
             A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
-            if the underlying algorithm was invoked anew, the total number of edits it produced.
+                if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
         if len(self._cached_edit_options) > 0:
             edits = ECCS._pop_n(self._cached_edit_options, max_results)
@@ -697,7 +697,7 @@ class ECCS:
 
         Returns:
             A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
-            if the underlying algorithm was invoked anew, the total number of edits it produced.
+                if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
         print("Computing and suggesting best single adjustment set change")
         print(
@@ -757,7 +757,7 @@ class ECCS:
 
         Returns:
             A list of tuples, each containing the variable that was changed, the corresponding edge edit(s),
-            and the resulting ATE.
+                and the resulting ATE.
         """
         base_ate = self.get_ate()
 
