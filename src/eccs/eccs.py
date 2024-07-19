@@ -49,6 +49,7 @@ class ECCS:
         self._cached_edit_options = []
         self._cached_furthest_ate = 0
         self._cached_acceptance_test = None
+        self._ate_cache = {}  # maps hashes of adjacency matrices to ate values
 
         # Load graph appropriately
         if isinstance(graph, str):
@@ -369,20 +370,36 @@ class ECCS:
         """
         return self._edge_states.is_edge_in_state(src, dst, EdgeState.BANNED)
 
+    @staticmethod
+    def hash_graph(graph: nx.DiGraph) -> int:
+        """
+        Hash a graph.
+
+        Parameters:
+            graph: The graph to hash.
+
+        Returns:
+            The hash of the graph.
+        """
+        adj_matrix = nx.adjacency_matrix(graph)
+        return hash(
+            (
+                tuple(adj_matrix.data),
+                tuple(adj_matrix.indices),
+                tuple(adj_matrix.indptr),
+            )
+        )
+
     def get_ate(
         self,
         graph: Optional[nx.DiGraph] = None,
-        treatment: Optional[str] = None,
-        outcome: Optional[str] = None,
     ) -> float:
         """
-        Calculate the average treatment effect (ATE) of `treatment` on `outcome` given `graph`.
-        If any of these parameters are not provided, the corresponding instance variables are used.
+        Calculate the average treatment effect (ATE) of `self._treatment` on `self._outcome` given `graph`.
+        If graph is not provided, `self._graph` is used.
 
         Parameters:
             graph: The graph to use for the calculation.
-            treatment: The treatment variable.
-            outcome: The outcome variable.
 
         Returns:
             The ATE.
@@ -390,14 +407,12 @@ class ECCS:
 
         if graph is None:
             graph = self._graph
-        if treatment is None:
-            treatment = self._treatment
-        if outcome is None:
-            outcome = self._outcome
-
-        return self.ate_calculator.get_ate_and_confidence(
-            self.data, treatment=treatment, outcome=outcome, graph=graph
-        )["ATE"]
+        graph_hash = ECCS.hash_graph(graph)
+        if graph_hash not in self._ate_cache:
+            self._ate_cache[graph_hash] = self.ate_calculator.get_ate_and_confidence(
+                self.data, treatment=self._treatment, outcome=self._outcome, graph=graph
+            )["ATE"]
+        return self._ate_cache[graph_hash]
 
     def suggest(
         self, method: str, budget: Optional[int] = None, max_results: int = None
@@ -425,19 +440,19 @@ class ECCS:
             raise ValueError(f"Invalid method: {method}")
 
         if method == "best_single_edge_change":
-            return self._suggest_best_single_edge_change()
+            return self.suggest_best_single_edge_change()
         elif method == "best_single_adjustment_set_change":
-            return self._suggest_best_single_adjustment_set_change(
+            return self.suggest_best_single_adjustment_set_change(
                 max_results=max_results, use_optimized=False
             )
         elif method == "best_single_adjustment_set_change_opt":
-            return self._suggest_best_single_adjustment_set_change(
+            return self.suggest_best_single_adjustment_set_change(
                 max_results=max_results, use_optimized=True
             )
         elif method == "random_single_edge_change":
-            return self._suggest_random_single_edge_change()
+            return self.suggest_random_single_edge_change()
         elif method == "astar_single_edge_change":
-            return self._suggest_best_single_edge_change_heuristic(
+            return self.suggest_best_single_edge_change_heuristic(
                 budget, max_results=max_results
             )
 
@@ -475,7 +490,7 @@ class ECCS:
         # Compute the ATE if the graph is acceptable
         if self._is_acceptable(graph):
             print("Graph is acceptable after edits: ", edits)
-            ate = self.get_ate(graph, self.treatment, self.outcome)
+            ate = self.get_ate(graph)
             print("Got back ATE: ", ate)
             return ate
 
@@ -515,7 +530,7 @@ class ECCS:
 
         return GraphRenderer.draw_graph(graph, edge_decisions_matrix)
 
-    def _suggest_best_single_edge_change(
+    def suggest_best_single_edge_change(
         self,
     ) -> Tuple[list[EdgeEdit], float, int]:
         """
@@ -526,7 +541,7 @@ class ECCS:
             if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
         base_ate = self.get_ate()
-        furthest_ate = self.get_ate()
+        furthest_ate = base_ate
         best_ate_diff = 0
         best_edits = []
 
@@ -589,9 +604,9 @@ class ECCS:
         return (best_edits, furthest_ate, 1)
 
     @staticmethod
-    def _pop_n(l: list, n: int):
+    def _pop_n(l: list[Any], n: int) -> list[Any]:
         """
-        Pop `n` elements from the start of list `l` and return them.
+        Pop `n` elements from the start of list `l` and return them as a list.
 
         Parameters:
             l: The list to pop from.
@@ -604,7 +619,7 @@ class ECCS:
         l[:] = l[n:]
         return elements
 
-    def _suggest_best_single_edge_change_heuristic(
+    def suggest_best_single_edge_change_heuristic(
         self, budget: Optional[int] = None, max_results: int = None
     ) -> Tuple[list[EdgeEdit], float, int]:
         """
@@ -669,7 +684,7 @@ class ECCS:
             graph.add_edge(edge[0], edge[1])
         return adjset
 
-    def _suggest_best_single_adjustment_set_change(
+    def suggest_best_single_adjustment_set_change(
         self, max_results: int = None, use_optimized: bool = True
     ) -> Tuple[list[EdgeEdit], float, int]:
         """
@@ -697,23 +712,92 @@ class ECCS:
             self._cached_acceptance_test = self._check_if_edits_were_accepted(edits)
             return (edits, self._cached_furthest_ate, 0)
 
+        ranking = self.get_adj_set_changes_ranking(use_optimized=use_optimized, k=1)
+
+        print("Done evaluating options")
+        if len(ranking) == 0:
+            return ([], self.get_ate(), 0)
+
+        _, best_edits, furthest_ate, _ = ranking[0]
+        num_best_edits = len(best_edits)
+
+        if num_best_edits == 0:
+            return ([], furthest_ate, 0)
+        elif (max_results is None) or (
+            num_best_edits <= max_results
+        ):  # No need to cache edits
+            self._cached_furthest_ate = furthest_ate
+            self._cached_edit_options = []
+            self._cached_acceptance_test = None
+            return (best_edits, furthest_ate, num_best_edits)
+        else:  # Must cache some edits
+            self._cached_furthest_ate = furthest_ate
+            self._cached_edit_options = best_edits
+            edits_to_return = ECCS._pop_n(self._cached_edit_options, max_results)
+            self._cached_acceptance_test = self._check_if_edits_were_accepted(
+                edits_to_return
+            )
+            return (edits_to_return, furthest_ate, num_best_edits)
+
+    def get_adj_set_changes_ranking(
+        self,
+        use_optimized: bool = True,
+        k: Optional[int] = None,
+        min_ate_ratio: Optional[float] = None,
+    ) -> list[tuple[str, list[EdgeEdit], float]]:
+        """
+        Get a ranking of single-variable adjustment set changes, based on their
+        impact on the ATE. Can filter by number of variables to return (`k`) and/or
+        by the minimum relative change in ATE.
+
+        Parameters:
+            use_optimized: Whether to use the optimized version of the algorithm.
+            k: The maximum number of changes to return. If None, all are returned.
+            min_ate_ratio: The minimum relative change in ATE to return. If None, all are returned.
+
+        Returns:
+            A list of tuples, each containing the variable that was changed, the corresponding edge edit(s),
+            and the resulting ATE.
+        """
         base_ate = self.get_ate()
-        furthest_ate = self.get_ate()
-        best_ate_diff = 0
-        best_edits = []
 
-        def maybe_update_best(ate, edits):
-            nonlocal best_ate_diff
-            nonlocal furthest_ate
-            nonlocal best_edits
+        ranking = []
+        # Each element has (variable, edits, ate, ate_ratio)
 
+        def maybe_update_ranking(v, edits, ate):
+            nonlocal ranking
+
+            # If the ate couldn't be computed, return
             if ate is None:
                 return
-            ate_diff = abs(ate - base_ate)
-            if ate_diff > best_ate_diff:
-                best_ate_diff = ate_diff
-                furthest_ate = ate
-                best_edits = edits
+
+            # If the achieved ate ratio is below cutoff, return
+            ate_ratio = abs((ate - base_ate) / base_ate)
+            if (min_ate_ratio is not None) and (ate_ratio < min_ate_ratio):
+                return
+
+            # If the ranking is full and the achieved ate ratio is below the
+            # worst in the ranking, return
+            if (
+                (k is not None)
+                and (len(ranking) == k)
+                and (ate_ratio <= ranking[-1][3])
+            ):
+                return
+
+            # Insert the new element in the right position in the ranking and trim
+            # down to desired length if needed.
+            inserted = False
+            for i, (_, _, _, r) in enumerate(ranking):
+                if ate_ratio > r:
+                    ranking.insert(i, (v, edits, ate, ate_ratio))
+                    inserted = True
+                    break
+            if not inserted:
+                ranking.append((v, edits, ate, ate_ratio))
+
+            if (k is not None) and (len(ranking) > k):
+                ranking.pop()
 
         base_adj_set = ECCS._find_adjustment_set(
             self._graph, self.treatment, self.outcome
@@ -740,7 +824,7 @@ class ECCS:
             edits = mapper.map_addition(v, use_optimized)
             print("Got back edits for addition: ", edits)
             ate = self._edit_and_get_ate(edits)
-            maybe_update_best(ate, edits)
+            maybe_update_ranking(v, edits, ate)
 
         # Try removing each of the removable
         for v in base_adj_set:
@@ -748,27 +832,9 @@ class ECCS:
             edits = mapper.map_removal(v, use_optimized)
             print("Got back edit lists for removal: ", edits)
             ate = self._edit_and_get_ate(edits)
-            maybe_update_best(ate, edits)
+            maybe_update_ranking(v, edits, ate)
 
-        print("Done evaluating options")
-        num_best_edits = len(best_edits)
-        if num_best_edits == 0:
-            return ([], furthest_ate, 0)
-        elif (max_results is None) or (
-            num_best_edits <= max_results
-        ):  # No need to cache edits
-            self._cached_furthest_ate = furthest_ate
-            self._cached_edit_options = []
-            self._cached_acceptance_test = None
-            return (best_edits, furthest_ate, num_best_edits)
-        else:  # Must cache some edits
-            self._cached_furthest_ate = furthest_ate
-            self._cached_edit_options = best_edits
-            edits_to_return = ECCS._pop_n(self._cached_edit_options, max_results)
-            self._cached_acceptance_test = self._check_if_edits_were_accepted(
-                edits_to_return
-            )
-            return (edits_to_return, furthest_ate, num_best_edits)
+        return ranking
 
     def _check_if_edits_were_accepted(
         self, edits: list[EdgeEdit]
@@ -778,11 +844,11 @@ class ECCS:
         recent edits to have been applied to self._graph.
 
         Parameters:
-            edit: The edit to evaluate.
+            edits: The edits to evaluate.
 
         Returns:
-            A lambda that will evaluate true if the edit could be the most
-            recent edit to have been applied to self._graph.
+            A lambda that will evaluate true if the edits could be the most
+            recent edits to have been applied to self._graph.
         """
         lambdas = []
         for src, dst, edit_type in edits:
@@ -800,7 +866,7 @@ class ECCS:
 
         return lambda: all([l() for l in lambdas])
 
-    def _suggest_random_single_edge_change(
+    def suggest_random_single_edge_change(
         self,
     ) -> Tuple[list[EdgeEdit], float, int]:
         """
