@@ -2922,7 +2922,7 @@
 </span><span id="__span-0-538"><a id="__codelineno-0-538" name="__codelineno-0-538"></a>
 </span><span id="__span-0-539"><a id="__codelineno-0-539" name="__codelineno-0-539"></a><span class="sd">        Returns:</span>
 </span><span id="__span-0-540"><a id="__codelineno-0-540" name="__codelineno-0-540"></a><span class="sd">            A tuple containing a list of the suggested edge edit(s), the resulting ATE and,</span>
-</span><span id="__span-0-541"><a id="__codelineno-0-541" name="__codelineno-0-541"></a><span class="sd">            if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
+</span><span id="__span-0-541"><a id="__codelineno-0-541" name="__codelineno-0-541"></a><span class="sd">                if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
 </span><span id="__span-0-542"><a id="__codelineno-0-542" name="__codelineno-0-542"></a><span class="sd">        &quot;&quot;&quot;</span>
 </span><span id="__span-0-543"><a id="__codelineno-0-543" name="__codelineno-0-543"></a>        <span class="n">base_ate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_ate</span><span class="p">()</span>
 </span><span id="__span-0-544"><a id="__codelineno-0-544" name="__codelineno-0-544"></a>        <span class="n">furthest_ate</span> <span class="o">=</span> <span class="n">base_ate</span>
@@ -3016,7 +3016,7 @@
 </span><span id="__span-0-632"><a id="__codelineno-0-632" name="__codelineno-0-632"></a>
 </span><span id="__span-0-633"><a id="__codelineno-0-633" name="__codelineno-0-633"></a><span class="sd">        Returns:</span>
 </span><span id="__span-0-634"><a id="__codelineno-0-634" name="__codelineno-0-634"></a><span class="sd">            A tuple containing a list of the suggested edge edit(s), the resulting ATE and,</span>
-</span><span id="__span-0-635"><a id="__codelineno-0-635" name="__codelineno-0-635"></a><span class="sd">            if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
+</span><span id="__span-0-635"><a id="__codelineno-0-635" name="__codelineno-0-635"></a><span class="sd">                if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
 </span><span id="__span-0-636"><a id="__codelineno-0-636" name="__codelineno-0-636"></a><span class="sd">        &quot;&quot;&quot;</span>
 </span><span id="__span-0-637"><a id="__codelineno-0-637" name="__codelineno-0-637"></a>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cached_edit_options</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
 </span><span id="__span-0-638"><a id="__codelineno-0-638" name="__codelineno-0-638"></a>            <span class="n">edits</span> <span class="o">=</span> <span class="n">ECCS</span><span class="o">.</span><span class="n">_pop_n</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cached_edit_options</span><span class="p">,</span> <span class="n">max_results</span><span class="p">)</span>
@@ -3081,7 +3081,7 @@
 </span><span id="__span-0-697"><a id="__codelineno-0-697" name="__codelineno-0-697"></a>
 </span><span id="__span-0-698"><a id="__codelineno-0-698" name="__codelineno-0-698"></a><span class="sd">        Returns:</span>
 </span><span id="__span-0-699"><a id="__codelineno-0-699" name="__codelineno-0-699"></a><span class="sd">            A tuple containing a list of the suggested edge edit(s), the resulting ATE and,</span>
-</span><span id="__span-0-700"><a id="__codelineno-0-700" name="__codelineno-0-700"></a><span class="sd">            if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
+</span><span id="__span-0-700"><a id="__codelineno-0-700" name="__codelineno-0-700"></a><span class="sd">                if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
 </span><span id="__span-0-701"><a id="__codelineno-0-701" name="__codelineno-0-701"></a><span class="sd">        &quot;&quot;&quot;</span>
 </span><span id="__span-0-702"><a id="__codelineno-0-702" name="__codelineno-0-702"></a>        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Computing and suggesting best single adjustment set change&quot;</span><span class="p">)</span>
 </span><span id="__span-0-703"><a id="__codelineno-0-703" name="__codelineno-0-703"></a>        <span class="nb">print</span><span class="p">(</span>
@@ -3141,7 +3141,7 @@
 </span><span id="__span-0-757"><a id="__codelineno-0-757" name="__codelineno-0-757"></a>
 </span><span id="__span-0-758"><a id="__codelineno-0-758" name="__codelineno-0-758"></a><span class="sd">        Returns:</span>
 </span><span id="__span-0-759"><a id="__codelineno-0-759" name="__codelineno-0-759"></a><span class="sd">            A list of tuples, each containing the variable that was changed, the corresponding edge edit(s),</span>
-</span><span id="__span-0-760"><a id="__codelineno-0-760" name="__codelineno-0-760"></a><span class="sd">            and the resulting ATE.</span>
+</span><span id="__span-0-760"><a id="__codelineno-0-760" name="__codelineno-0-760"></a><span class="sd">                and the resulting ATE.</span>
 </span><span id="__span-0-761"><a id="__codelineno-0-761" name="__codelineno-0-761"></a><span class="sd">        &quot;&quot;&quot;</span>
 </span><span id="__span-0-762"><a id="__codelineno-0-762" name="__codelineno-0-762"></a>        <span class="n">base_ate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_ate</span><span class="p">()</span>
 </span><span id="__span-0-763"><a id="__codelineno-0-763" name="__codelineno-0-763"></a>
@@ -5919,21 +5919,12 @@ Parameters:
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code>list[<a class="autorefs autorefs-internal" title="eccs.edges.EdgeEdit" href="../edges/#eccs.edges.EdgeEdit">EdgeEdit</a>]</code>
+                  <code><span title="typing.Tuple">Tuple</span>[list[<a class="autorefs autorefs-internal" title="eccs.edges.EdgeEdit" href="../edges/#eccs.edges.EdgeEdit">EdgeEdit</a>], float, int]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A tuple containing a list of the suggested edge edit(s), the resulting ATE and,</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code>float</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>if the underlying algorithm was invoked anew, the total number of edits it produced.</p>
+                <p>A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
+if the underlying algorithm was invoked anew, the total number of edits it produced.</p>
               </div>
             </td>
           </tr>
@@ -6021,7 +6012,7 @@ Parameters:
 </span><span id="__span-0-538"><a id="__codelineno-0-538" name="__codelineno-0-538"></a>
 </span><span id="__span-0-539"><a id="__codelineno-0-539" name="__codelineno-0-539"></a><span class="sd">    Returns:</span>
 </span><span id="__span-0-540"><a id="__codelineno-0-540" name="__codelineno-0-540"></a><span class="sd">        A tuple containing a list of the suggested edge edit(s), the resulting ATE and,</span>
-</span><span id="__span-0-541"><a id="__codelineno-0-541" name="__codelineno-0-541"></a><span class="sd">        if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
+</span><span id="__span-0-541"><a id="__codelineno-0-541" name="__codelineno-0-541"></a><span class="sd">            if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
 </span><span id="__span-0-542"><a id="__codelineno-0-542" name="__codelineno-0-542"></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="__span-0-543"><a id="__codelineno-0-543" name="__codelineno-0-543"></a>    <span class="n">base_ate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_ate</span><span class="p">()</span>
 </span><span id="__span-0-544"><a id="__codelineno-0-544" name="__codelineno-0-544"></a>    <span class="n">furthest_ate</span> <span class="o">=</span> <span class="n">base_ate</span>
@@ -6280,21 +6271,12 @@ If None, all suggested edits are returned.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code>list[<a class="autorefs autorefs-internal" title="eccs.edges.EdgeEdit" href="../edges/#eccs.edges.EdgeEdit">EdgeEdit</a>]</code>
+                  <code><span title="typing.Tuple">Tuple</span>[list[<a class="autorefs autorefs-internal" title="eccs.edges.EdgeEdit" href="../edges/#eccs.edges.EdgeEdit">EdgeEdit</a>], float, int]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A tuple containing a list of the suggested edge edit(s), the resulting ATE and,</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code>float</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>if the underlying algorithm was invoked anew, the total number of edits it produced.</p>
+                <p>A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
+if the underlying algorithm was invoked anew, the total number of edits it produced.</p>
               </div>
             </td>
           </tr>
@@ -6352,7 +6334,7 @@ If None, all suggested edits are returned.</p>
 </span><span id="__span-0-632"><a id="__codelineno-0-632" name="__codelineno-0-632"></a>
 </span><span id="__span-0-633"><a id="__codelineno-0-633" name="__codelineno-0-633"></a><span class="sd">    Returns:</span>
 </span><span id="__span-0-634"><a id="__codelineno-0-634" name="__codelineno-0-634"></a><span class="sd">        A tuple containing a list of the suggested edge edit(s), the resulting ATE and,</span>
-</span><span id="__span-0-635"><a id="__codelineno-0-635" name="__codelineno-0-635"></a><span class="sd">        if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
+</span><span id="__span-0-635"><a id="__codelineno-0-635" name="__codelineno-0-635"></a><span class="sd">            if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
 </span><span id="__span-0-636"><a id="__codelineno-0-636" name="__codelineno-0-636"></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="__span-0-637"><a id="__codelineno-0-637" name="__codelineno-0-637"></a>    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cached_edit_options</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
 </span><span id="__span-0-638"><a id="__codelineno-0-638" name="__codelineno-0-638"></a>        <span class="n">edits</span> <span class="o">=</span> <span class="n">ECCS</span><span class="o">.</span><span class="n">_pop_n</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cached_edit_options</span><span class="p">,</span> <span class="n">max_results</span><span class="p">)</span>
@@ -6609,21 +6591,12 @@ If None, all suggested edits are returned.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code>list[<a class="autorefs autorefs-internal" title="eccs.edges.EdgeEdit" href="../edges/#eccs.edges.EdgeEdit">EdgeEdit</a>]</code>
+                  <code><span title="typing.Tuple">Tuple</span>[list[<a class="autorefs autorefs-internal" title="eccs.edges.EdgeEdit" href="../edges/#eccs.edges.EdgeEdit">EdgeEdit</a>], float, int]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A tuple containing a list of the suggested edge edit(s), the resulting ATE and,</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code>float</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>if the underlying algorithm was invoked anew, the total number of edits it produced.</p>
+                <p>A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
+if the underlying algorithm was invoked anew, the total number of edits it produced.</p>
               </div>
             </td>
           </tr>
@@ -6698,7 +6671,7 @@ If None, all suggested edits are returned.</p>
 </span><span id="__span-0-697"><a id="__codelineno-0-697" name="__codelineno-0-697"></a>
 </span><span id="__span-0-698"><a id="__codelineno-0-698" name="__codelineno-0-698"></a><span class="sd">    Returns:</span>
 </span><span id="__span-0-699"><a id="__codelineno-0-699" name="__codelineno-0-699"></a><span class="sd">        A tuple containing a list of the suggested edge edit(s), the resulting ATE and,</span>
-</span><span id="__span-0-700"><a id="__codelineno-0-700" name="__codelineno-0-700"></a><span class="sd">        if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
+</span><span id="__span-0-700"><a id="__codelineno-0-700" name="__codelineno-0-700"></a><span class="sd">            if the underlying algorithm was invoked anew, the total number of edits it produced.</span>
 </span><span id="__span-0-701"><a id="__codelineno-0-701" name="__codelineno-0-701"></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="__span-0-702"><a id="__codelineno-0-702" name="__codelineno-0-702"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Computing and suggesting best single adjustment set change&quot;</span><span class="p">)</span>
 </span><span id="__span-0-703"><a id="__codelineno-0-703" name="__codelineno-0-703"></a>    <span class="nb">print</span><span class="p">(</span>
@@ -6833,17 +6806,8 @@ by the minimum relative change in ATE.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A list of tuples, each containing the variable that was changed, the corresponding edge edit(s),</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code>list[tuple[str, list[<a class="autorefs autorefs-internal" title="eccs.edges.EdgeEdit" href="../edges/#eccs.edges.EdgeEdit">EdgeEdit</a>], float]]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>and the resulting ATE.</p>
+                <p>A list of tuples, each containing the variable that was changed, the corresponding edge edit(s),
+and the resulting ATE.</p>
               </div>
             </td>
           </tr>
@@ -6965,7 +6929,7 @@ by the minimum relative change in ATE.</p>
 </span><span id="__span-0-757"><a id="__codelineno-0-757" name="__codelineno-0-757"></a>
 </span><span id="__span-0-758"><a id="__codelineno-0-758" name="__codelineno-0-758"></a><span class="sd">    Returns:</span>
 </span><span id="__span-0-759"><a id="__codelineno-0-759" name="__codelineno-0-759"></a><span class="sd">        A list of tuples, each containing the variable that was changed, the corresponding edge edit(s),</span>
-</span><span id="__span-0-760"><a id="__codelineno-0-760" name="__codelineno-0-760"></a><span class="sd">        and the resulting ATE.</span>
+</span><span id="__span-0-760"><a id="__codelineno-0-760" name="__codelineno-0-760"></a><span class="sd">            and the resulting ATE.</span>
 </span><span id="__span-0-761"><a id="__codelineno-0-761" name="__codelineno-0-761"></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="__span-0-762"><a id="__codelineno-0-762" name="__codelineno-0-762"></a>    <span class="n">base_ate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_ate</span><span class="p">()</span>
 </span><span id="__span-0-763"><a id="__codelineno-0-763" name="__codelineno-0-763"></a>
