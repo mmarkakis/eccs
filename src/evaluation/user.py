@@ -64,6 +64,8 @@ class ECCSUser:
         self._eccs = ECCS(data, test_graph)
         self._eccs.set_treatment(treatment)
         self._eccs.set_outcome(outcome)
+        self._true_ate = None
+        self._current_ate = None
 
         # This is the index of steps where algorithms that might suggest multiple
         # edges in one invocation got invoked, for plotting and data analysis
@@ -105,26 +107,6 @@ class ECCSUser:
         print(f"An optimal edit path: {self.current_optimal_edit_path}")
 
     @property
-    def current_has_directed_path(self) -> bool:
-        """
-        Returns whether the current graph contains a directed path from the treatment to the outcome.
-
-        Returns:
-            Whether the current graph contains a directed path from the treatment to the outcome.
-        """
-        return nx.has_path(self._eccs.graph, self._treatment, self._outcome)
-
-    @property
-    def true_has_directed_path(self) -> bool:
-        """
-        Returns whether the true graph contains a directed path from the treatment to the outcome.
-
-        Returns:
-            Whether the true graph contains a directed path from the treatment to the outcome.
-        """
-        return nx.has_path(self._true_graph, self._treatment, self._outcome)
-
-    @property
     def true_ate(self) -> float:
         """
         Returns the true ATE of the treatment on the outcome.
@@ -133,11 +115,14 @@ class ECCSUser:
             The true ATE of the treatment on the outcome, or
             None if the graph does not contain a directed path from the treatment to the outcome.
         """
-        if not self.true_has_directed_path:
-            return 0
-        return self.ate_calculator.get_ate_and_confidence(
-            self._data, self._treatment, self._outcome, self._true_graph
-        )["ATE"]
+        if self._true_ate is None:
+            if nx.has_path(self._true_graph, self._treatment, self._outcome):
+                self._true_ate = self.ate_calculator.get_ate_and_confidence(
+                    self._data, self._treatment, self._outcome, self._true_graph
+                )["ATE"]
+            else:
+                self._true_ate = 0
+        return self._true_ate
 
     @property
     def current_ate(self) -> float:
@@ -148,11 +133,7 @@ class ECCSUser:
             The ATE of the treatment on the outcome based on the current graph, or
             None if the graph does not contain a directed path from the treatment to the outcome.
         """
-        if not self.current_has_directed_path:
-            return 0
-        return self.ate_calculator.get_ate_and_confidence(
-            self._data, self._treatment, self._outcome, self._eccs.graph
-        )["ATE"]
+        return self._eccs.get_ate()
 
     @property
     def current_ate_diff(self) -> float:
@@ -163,8 +144,6 @@ class ECCSUser:
             The difference between the current ATE and the true ATE, or
             None if either graph does not contain a directed path from the treatment to the outcome.
         """
-        # if not self.current_has_directed_path or not self.true_has_directed_path:
-        #    return None
         return self.current_ate - self.true_ate
 
     @property
@@ -339,6 +318,8 @@ class ECCSUser:
                 fban = self._eccs.ban_edge(src, dst)
                 rrem = self._eccs.remove_edge(dst, src, remove_isolates=False)
                 rban = self._eccs.ban_edge(dst, src)
+
+            self._current_ate = None
 
             print(
                 f"\tUser judgement for edge {src} -> {dst}: "

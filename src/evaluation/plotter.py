@@ -413,7 +413,8 @@ def plot_invocation_duration_scaling(
         ax: The axis to plot on.
         method: The method to plot.
         base_path: The base path to the results.
-        data_points_to_prefixes: A dictionary mapping each data point to the prefixes of the files to consider.
+        prefix_to_data_point: A mapping from file prefix to the data point into
+            which the data of that file should be incorporated.
 
     Returns:
         The maximum plotted value.
