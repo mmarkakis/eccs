@@ -19,6 +19,8 @@ import signal
 import json
 from functools import partial
 from src.evaluation.plotter import plotter
+import cProfile
+import pstats
 
 
 def kill_still_running(executor, futures, sig, frame):
@@ -43,6 +45,7 @@ def simulate(
         int,
         int,
         int,
+        bool
     ]
 ) -> None:
     """
@@ -61,6 +64,7 @@ def simulate(
             num_steps: The number of steps to run the ECCS user for.
             i: The index of the run, if applicable.
             astar_budget: The budget for astar, if applicable
+            profile: Whether to enable profiling.
     """
 
     (
@@ -75,7 +79,12 @@ def simulate(
         num_steps,
         i,
         astar_budget,
+        profile
     ) = args
+
+    if profile:
+        profiler = cProfile.Profile()
+        profiler.enable()
 
     f = open(
         os.path.join(
@@ -165,6 +174,10 @@ def simulate(
 
     f.close()
 
+    if profile:
+        profiler.disable()
+        profiler.dump_stats(f"{exp_prefix}_profile.prof")
+
 
 async def main():
     # Get the absolute path to the directory containing this file.
@@ -185,11 +198,21 @@ async def main():
         default=os.path.join(current_directory, "../../evaluation/"),
         help="Output directory path",
     )
+    parser.add_argument(
+        "--profile", 
+        action="store_true",
+        help="Enable profiling"
+    )
     args = parser.parse_args()
 
     # Read config yml file and create bookkeeping dir structure
     with open(args.config_path, "r") as file:
         config = yaml.safe_load(file)
+
+    if type(config["gen_dag"]["num_nodes"]) != list:
+        config["gen_dag"]["num_nodes"] = [config["gen_dag"]["num_nodes"]]
+    if type(config["gen_dag"]["edge_prob"]) != list:
+        config["gen_dag"]["edge_prob"] = [config["gen_dag"]["edge_prob"]]
 
     phases_to_skip = config["general"]["phases_to_skip"]
     path_timestamp = (
@@ -404,6 +427,7 @@ async def main():
                                                 num_steps,
                                                 i,
                                                 config["run_eccs"]["astar_budget"],
+                                                args.profile
                                             )
                                         )
                                 else:
@@ -420,6 +444,7 @@ async def main():
                                             num_steps,
                                             None,
                                             config["run_eccs"]["astar_budget"],
+                                            args.profile
                                         )
                                     )
 
@@ -433,6 +458,19 @@ async def main():
             for _ in as_completed(futures):
                 pbar.update(1)
         pbar.close()
+
+        # Aggregate profiling stats if applicable
+        if args.profile:
+            for method in methods:
+                stats = None
+                method_data_path = os.path.join(work_path, method, "data")
+                for file in os.listdir(method_data_path):
+                    if file.endswith("_profile.prof"):
+                        if stats is None:
+                            stats = pstats.Stats(os.path.join(method_data_path, file))
+                        else:
+                            stats.add(os.path.join(method_data_path, file))
+                stats.dump_stats(os.path.join(work_path, method, "profile.prof"))
     else:
         print(f"{datetime.now()} Phase 4: Skipping experiment")
 
