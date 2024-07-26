@@ -381,14 +381,7 @@ class ECCS:
         Returns:
             The hash of the graph.
         """
-        adj_matrix = nx.adjacency_matrix(graph)
-        return hash(
-            (
-                tuple(adj_matrix.data),
-                tuple(adj_matrix.indices),
-                tuple(adj_matrix.indptr),
-            )
-        )
+        return sum(hash(edge) for edge in graph.edges)
 
     def get_ate(
         self,
