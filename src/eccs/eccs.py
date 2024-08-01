@@ -704,7 +704,8 @@ class ECCS:
         """
         Printer.printv("Computing and suggesting best single adjustment set change")
         Printer.printv(
-            f"The current cache size is {len(self._cached_edit_options)} and the acceptance test returns {self._cached_acceptance_test()}"
+            f"""The current cache size is {len(self._cached_edit_options)} and the acceptance test """
+            f"""returns {self._cached_acceptance_test() if self._cached_acceptance_test is not None else None}"""
         )
 
         if len(self._cached_edit_options) > 0 and self._cached_acceptance_test():
