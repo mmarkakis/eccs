@@ -7,6 +7,7 @@ from typing import Any, List, Optional, Tuple
 from .ate import ATECalculator
 from .edge_state_matrix import EdgeStateMatrix
 from .edges import EdgeEditType, EdgeEdit
+from .printer import Printer
 
 DEFAULT_BUDGET = 1000
 
@@ -30,7 +31,7 @@ class AStarSearch:
 
         # n is the number of causal variables
         # m is the number of edges in the initial graph
-        print("Initializing A star")
+        Printer.printv("Initializing A star")
         self.m = len(init_graph.edges())
         self.n = len(init_graph.nodes())
         self.init_graph = init_graph
@@ -71,7 +72,7 @@ class AStarSearch:
         assert 0 in self._ATE_cache
         self.ATE_init = init_ATE_info["ATE"]
         self._init_potential = self._get_potential(0, init_graph)
-        print("Initialization finished")
+        Printer.printv("Initialization finished")
 
     def _get_ATE_info(self, id: int, graph: nx.DiGraph):
         try:
@@ -86,7 +87,6 @@ class AStarSearch:
                     calculate_p_value=True,
                     calculate_std_error=False, ## FIXME: Turned off for now
                     get_estimand=False,
-                    print_timing_info=False,
                 )
                 self._ATE_cache[id] = ate
             except ValueError:  # Returned by handler of nx.exception.NodeNotFound
@@ -286,7 +286,7 @@ class AStarSearch:
                 heapq.heappop(top_k_candidates)
             neighbors = self._get_neighbors(current_node_id, frontier, n_lookahead)
             if self._cur_next_id > self._computational_budget:
-                print(
+                Printer.printv(
                     "Out of computational budget: ",
                     self._cur_next_id,
                     self._computational_budget,
@@ -315,7 +315,7 @@ class AStarSearch:
                     )
 
                 if self._cur_next_id > self._computational_budget:
-                    print(
+                    Printer.printv(
                         "Out of computational budget: ",
                         self._cur_next_id,
                         self._computational_budget,
@@ -345,8 +345,8 @@ class AStarSearch:
         num_return = 10
         res = []
         sorted_edges = sorted(edge_tally.items(), key=lambda x: x[1][0], reverse=True)                
-        print("The top 10 edges are")
-        print(sorted_edges[:10])
+        Printer.printv("The top 10 edges are")
+        Printer.printv(sorted_edges[:10])
         for (edge, _) in sorted_edges:
             src = edge[0]
             dst = edge[1]

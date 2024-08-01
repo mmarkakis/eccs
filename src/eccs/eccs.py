@@ -8,6 +8,7 @@ from .edges import Edge, EdgeEditType, EdgeEdit
 from .graph_renderer import GraphRenderer
 from .heuristic_search import AStarSearch
 from .map_adj_set_to_graph import MapAdjSetToGraph
+from .printer import Printer
 
 from itertools import combinations
 import numpy as np
@@ -64,19 +65,19 @@ class ECCS:
         for i in range(self._num_vars):
             self.ban_edge(self._data.columns[i], self._data.columns[i])
 
-        print("Initialized ECCS!")
-        print(
+        Printer.printv("Initialized ECCS!")
+        Printer.printv(
             f"The graph has {self._graph.number_of_nodes()} nodes and {self._graph.number_of_edges()} edges."
         )
         num_fixed_edges = len(self._edge_states.fixed_list)
         num_banned_edges = len(self._edge_states.ban_list)
-        print(
+        Printer.printv(
             f"Of the {self._graph.number_of_edges()} edges in the graph, {num_fixed_edges} are fixed."
         )
-        print(
+        Printer.printv(
             f"Of the {self._num_vars**2 - self._graph.number_of_edges()} edges not in the graph, {num_banned_edges} are banned."
         )
-        print(
+        Printer.printv(
             f"The number of modifiable edges is {self._num_vars**2 - num_fixed_edges - num_banned_edges}."
         )
 
@@ -154,6 +155,15 @@ class ECCS:
         Returns the graph.
         """
         return self._graph
+
+    def set_verbose_to(self, val: bool) -> None:
+        """
+        Set the verbosity of the printer.
+
+        Parameters:
+            val: The new verbosity value.
+        """
+        Printer.set_verbose(val)
 
     def _is_acceptable(self, graph: Optional[nx.DiGraph]) -> bool:
         """
@@ -465,7 +475,7 @@ class ECCS:
 
         # Edit graph
         for src, dst, edit_type in edits:
-            print("Applying edit: ", src, dst, edit_type)
+            Printer.printv("Applying edit: ", src, dst, edit_type)
             if edit_type == EdgeEditType.ADD:
                 if not graph.has_edge(src, dst):
                     graph.add_edge(src, dst)
@@ -478,16 +488,16 @@ class ECCS:
                 if not graph.has_edge(dst, src):
                     graph.add_edge(dst, src)
 
-        print("Applied edits successfully")
+        Printer.printv("Applied edits successfully")
 
         # Compute the ATE if the graph is acceptable
         if self._is_acceptable(graph):
-            print("Graph is acceptable after edits: ", edits)
+            Printer.printv("Graph is acceptable after edits: ", edits)
             ate = self.get_ate(graph)
-            print("Got back ATE: ", ate)
+            Printer.printv("Got back ATE: ", ate)
             return ate
 
-        print("Graph is not acceptable after edits: ", edits)
+        Printer.printv("Graph is not acceptable after edits: ", edits)
         return None
 
     def _edit_and_draw(self, edits: list[EdgeEdit]) -> Optional[str]:
@@ -692,13 +702,13 @@ class ECCS:
             A tuple containing a list of the suggested edge edit(s), the resulting ATE and,
                 if the underlying algorithm was invoked anew, the total number of edits it produced.
         """
-        print("Computing and suggesting best single adjustment set change")
-        print(
-            f"The current cache size is {len(self._cached_edit_options)} and the acceptance test returns {self._cached_acceptance_test}"
+        Printer.printv("Computing and suggesting best single adjustment set change")
+        Printer.printv(
+            f"The current cache size is {len(self._cached_edit_options)} and the acceptance test returns {self._cached_acceptance_test()}"
         )
 
         if len(self._cached_edit_options) > 0 and self._cached_acceptance_test():
-            print(
+            Printer.printv(
                 "Serving previous edge suggestion(s) based on best single adjustment set change"
             )
             edits = ECCS._pop_n(self._cached_edit_options, max_results)
@@ -707,7 +717,7 @@ class ECCS:
 
         ranking = self.get_adj_set_changes_ranking(use_optimized=use_optimized, k=1)
 
-        print("Done evaluating options")
+        Printer.printv("Done evaluating options")
         if len(ranking) == 0:
             return ([], self.get_ate(), 0)
 
@@ -795,7 +805,7 @@ class ECCS:
         base_adj_set = ECCS._find_adjustment_set(
             self._graph, self.treatment, self.outcome
         )
-        print("Found base adjustment set: ", base_adj_set)
+        Printer.printv("Found base adjustment set: ", base_adj_set)
         vars_not_in_adj_set = [
             v
             for v in self.vars
@@ -813,17 +823,17 @@ class ECCS:
 
         # Try adding each of the addable
         for v in vars_not_in_adj_set:
-            print(f"Trying to add {v} to the adjustment set")
+            Printer.printv(f"Trying to add {v} to the adjustment set")
             edits = mapper.map_addition(v, use_optimized)
-            print("Got back edits for addition: ", edits)
+            Printer.printv("Got back edits for addition: ", edits)
             ate = self._edit_and_get_ate(edits)
             maybe_update_ranking(v, edits, ate)
 
         # Try removing each of the removable
         for v in base_adj_set:
-            print(f"Trying to remove {v} from the adjustment set")
+            Printer.printv(f"Trying to remove {v} from the adjustment set")
             edits = mapper.map_removal(v, use_optimized)
-            print("Got back edit lists for removal: ", edits)
+            Printer.printv("Got back edit lists for removal: ", edits)
             ate = self._edit_and_get_ate(edits)
             maybe_update_ranking(v, edits, ate)
 

@@ -76,6 +76,7 @@ nav:
       - "GraphRenderer": reference/eccs/graph_renderer.md
       - "HeuristicSearch": reference/eccs/heuristic_search.md
       - "MapAdjSetToGraph": reference/eccs/map_adj_set_to_graph.md
+      - "Printer": reference/eccs/printer.md
     - Generators:
       - "RandomDAGGenerator": reference/generators/random_dag_generator.md
       - "RandomDatasetGenerator": reference/generators/random_dataset_generator.md

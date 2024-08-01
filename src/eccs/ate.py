@@ -8,6 +8,7 @@ from datetime import datetime
 import warnings
 import sympy as sp
 
+from .printer import Printer
 
 class ATECalculator:
     """
@@ -34,7 +35,6 @@ class ATECalculator:
         calculate_p_value: bool = False,
         calculate_std_error: bool = False,
         get_estimand: bool = False,
-        print_timing_info: bool = False,
     ) -> dict[str, Any]:
         """
         Calculate the ATE of `treatment` on `outcome`, alongside confidence measures.
@@ -48,7 +48,6 @@ class ATECalculator:
             calculate_p_value: Whether to calculate the P-value of the ATE.
             calculate_std_error: Whether to calculate the standard error of the ATE.
             get_estimand: Whether to return the estimand used to calculate the ATE, as part of the returned dictionary.
-            print_timing_info: Whether to print timing information.
 
         Returns:
             A dictionary containing the ATE of `treatment` on `outcome`, alongside confidence measures. If
@@ -137,9 +136,9 @@ class ATECalculator:
                     raise ValueError
 
         timings.append(datetime.now())
-        if print_timing_info:
-            print("\tTimings:")
-            for i in range(1, len(timings)):
-                print(f"\t\tStep {i}: {timings[i] - timings[i-1]}")
+
+        Printer.printv("\tTimings:")
+        for i in range(1, len(timings)):
+            Printer.printv(f"\t\tStep {i}: {timings[i] - timings[i-1]}")
 
         return d
