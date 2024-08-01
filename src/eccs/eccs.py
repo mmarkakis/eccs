@@ -475,7 +475,7 @@ class ECCS:
 
         # Edit graph
         for src, dst, edit_type in edits:
-            Printer.printv("Applying edit: ", src, dst, edit_type)
+            Printer.printv(f"Applying edit:  {src}, {dst}, {edit_type}")
             if edit_type == EdgeEditType.ADD:
                 if not graph.has_edge(src, dst):
                     graph.add_edge(src, dst)
@@ -492,12 +492,12 @@ class ECCS:
 
         # Compute the ATE if the graph is acceptable
         if self._is_acceptable(graph):
-            Printer.printv("Graph is acceptable after edits: ", edits)
+            Printer.printv(f"Graph is acceptable after edits: {edits}")
             ate = self.get_ate(graph)
-            Printer.printv("Got back ATE: ", ate)
+            Printer.printv(f"Got back ATE: {ate}")
             return ate
 
-        Printer.printv("Graph is not acceptable after edits: ", edits)
+        Printer.printv(f"Graph is not acceptable after edits: {edits}")
         return None
 
     def _edit_and_draw(self, edits: list[EdgeEdit]) -> Optional[str]:
@@ -806,7 +806,7 @@ class ECCS:
         base_adj_set = ECCS._find_adjustment_set(
             self._graph, self.treatment, self.outcome
         )
-        Printer.printv("Found base adjustment set: ", base_adj_set)
+        Printer.printv(f"Found base adjustment set: {base_adj_set}")
         vars_not_in_adj_set = [
             v
             for v in self.vars
@@ -826,7 +826,7 @@ class ECCS:
         for v in vars_not_in_adj_set:
             Printer.printv(f"Trying to add {v} to the adjustment set")
             edits = mapper.map_addition(v, use_optimized)
-            Printer.printv("Got back edits for addition: ", edits)
+            Printer.printv(f"Got back edits for addition: {edits}")
             ate = self._edit_and_get_ate(edits)
             maybe_update_ranking(v, edits, ate)
 
@@ -834,7 +834,7 @@ class ECCS:
         for v in base_adj_set:
             Printer.printv(f"Trying to remove {v} from the adjustment set")
             edits = mapper.map_removal(v, use_optimized)
-            Printer.printv("Got back edit lists for removal: ", edits)
+            Printer.printv(f"Got back edit lists for removal: {edits}")
             ate = self._edit_and_get_ate(edits)
             maybe_update_ranking(v, edits, ate)
 

@@ -287,9 +287,7 @@ class AStarSearch:
             neighbors = self._get_neighbors(current_node_id, frontier, n_lookahead)
             if self._cur_next_id > self._computational_budget:
                 Printer.printv(
-                    "Out of computational budget: ",
-                    self._cur_next_id,
-                    self._computational_budget,
+                    f"Out of computational budget: {self._cur_next_id}, {self._computational_budget}"
                 )
                 break
             for neighbor_id, edge_type in neighbors:
@@ -316,9 +314,7 @@ class AStarSearch:
 
                 if self._cur_next_id > self._computational_budget:
                     Printer.printv(
-                        "Out of computational budget: ",
-                        self._cur_next_id,
-                        self._computational_budget,
+                        f"Out of computational budget: {self._cur_next_id}, {self._computational_budget}"
                     )
                     break
             self._visited.add(current_node_id)
